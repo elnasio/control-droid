@@ -6,6 +6,7 @@ import com.mories.control_droid.core.control.AccessibilityController
 import com.mories.control_droid.core.control.ScreenCaptureManager
 import com.mories.control_droid.core.model.DeviceAction
 import fi.iki.elonen.NanoHTTPD
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.FileInputStream
 import java.util.concurrent.atomic.AtomicBoolean
@@ -51,18 +52,24 @@ object TargetHttpServer : NanoHTTPD(8080) {
 
             session.uri == "/action" && session.method == Method.POST -> {
                 val body = session.parseBodyToString()
+
                 DeviceAction.entries.find { it.command == body }?.let { action ->
                     Log.d("TargetHttpServer", "Performing action: ${action.name}")
-                    AccessibilityController.performAction(action)
 
-                    if (action == DeviceAction.CAPTURE_SCREEN) {
-                        ScreenCaptureManager.captureOnce(context)
+                    when (action) {
+                        DeviceAction.CAPTURE_SCREEN -> runBlocking {
+                            val bitmap = ScreenCaptureManager.captureOnceSuspend(context)
+                            if (bitmap != null) {
+                                ScreenCaptureManager.saveBitmap(context, bitmap)
+                            }
+                        }
+
+                        else -> AccessibilityController.performAction(action)
                     }
                 }
 
                 newFixedLengthResponse("OK")
             }
-
             session.uri == "/screenshot" && session.method == Method.GET -> {
                 val file = File(context.cacheDir, "screenshot.png")
                 return if (file.exists() && file.length() > 0) {

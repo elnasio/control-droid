@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.mories.control_droid.core.control.ScreenCaptureManager
 import com.mories.control_droid.core.server.TargetHttpServer
 
 @Composable
@@ -29,6 +30,9 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
     LaunchedEffect(Unit) {
         try {
             TargetHttpServer.startServer { context }
+            if (ScreenCaptureManager.isReady()) {
+                ScreenCaptureManager.startAutoCapture(context)
+            }
         } catch (e: Exception) {
             Log.e("TargetWaiting", "Failed to start server: ${e.message}")
         }
@@ -64,6 +68,7 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = {
                 val intent = Intent(context, ScreenPermissionActivity::class.java)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
             }) {
                 Text("Grant Screenshot Permission")

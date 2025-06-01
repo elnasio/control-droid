@@ -1,17 +1,25 @@
 package com.mories.control_droid.features.target
 
 import android.content.Context
-import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import com.mories.control_droid.core.control.ScreenCaptureManager
 
 class ScreenPermissionActivity : ComponentActivity() {
 
-    companion object {
-        const val REQUEST_CODE_CAPTURE = 9001
-    }
+    private val captureLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK && result.data != null) {
+                ScreenCaptureManager.setProjection(this, result.resultCode, result.data!!)
+                Log.d("ScreenPermission", "✅ Projection granted")
+            } else {
+                Log.e("ScreenPermission", "❌ Projection denied or cancelled")
+            }
+            finish()
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -19,15 +27,6 @@ class ScreenPermissionActivity : ComponentActivity() {
         val projectionManager =
             getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         val intent = projectionManager.createScreenCaptureIntent()
-        startActivityForResult(intent, REQUEST_CODE_CAPTURE)
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data) // ✅ tambahkan ini
-
-        if (requestCode == REQUEST_CODE_CAPTURE && resultCode == RESULT_OK && data != null) {
-            ScreenCaptureManager.setProjection(this, resultCode, data)
-        }
-        finish()
+        captureLauncher.launch(intent)
     }
 }

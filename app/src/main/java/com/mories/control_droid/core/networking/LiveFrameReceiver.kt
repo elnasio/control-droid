@@ -1,5 +1,7 @@
 package com.mories.control_droid.core.networking
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -14,7 +16,7 @@ class LiveFrameReceiver(
     private val client = OkHttpClient()
     private var webSocket: WebSocket? = null
 
-    fun connect(onFrameReceived: (ByteArray) -> Unit) {
+    fun connect(onFrameReceived: (Bitmap) -> Unit) {
         val request = Request.Builder().url("ws://$ip:$port/ws").build()
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -23,7 +25,18 @@ class LiveFrameReceiver(
             }
 
             override fun onMessage(ws: WebSocket, bytes: ByteString) {
-                onFrameReceived(bytes.toByteArray())
+                try {
+                    val bitmap = BitmapFactory.decodeByteArray(
+                        bytes.toByteArray(), 0, bytes.size
+                    )
+                    if (bitmap != null) {
+                        onFrameReceived(bitmap)
+                    } else {
+                        Log.w("FrameReceiver", "⚠️ Failed to decode bitmap")
+                    }
+                } catch (e: Exception) {
+                    Log.e("FrameReceiver", "❌ Decode error: ${e.message}")
+                }
             }
 
             override fun onClosed(ws: WebSocket, code: Int, reason: String) {
