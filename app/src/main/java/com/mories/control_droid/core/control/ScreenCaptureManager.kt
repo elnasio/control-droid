@@ -72,7 +72,7 @@ object ScreenCaptureManager {
             null
         )
 
-        delay(500) // Beri waktu tampilan virtual terbentuk
+        delay(500)
 
         val image = imageReader.acquireLatestImage()
         if (image == null) {

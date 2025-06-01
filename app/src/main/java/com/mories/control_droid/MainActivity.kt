@@ -19,6 +19,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mories.control_droid.core.auth.RoleManager
+import com.mories.control_droid.core.control.HttpRelayService
 import com.mories.control_droid.core.model.DeviceRole.CONTROLLER
 import com.mories.control_droid.core.model.DeviceRole.TARGET
 import com.mories.control_droid.core.storage.PairedDeviceStore
@@ -34,6 +35,7 @@ import com.mories.control_droid.ui.theme.ControldroidTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        HttpRelayService.start()
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         setContent {

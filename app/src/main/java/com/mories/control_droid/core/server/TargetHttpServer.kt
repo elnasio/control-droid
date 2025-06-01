@@ -2,11 +2,14 @@ package com.mories.control_droid.core.server
 
 import android.content.Context
 import android.util.Log
+import com.mories.control_droid.core.ConstantValue
 import com.mories.control_droid.core.control.AccessibilityController
 import com.mories.control_droid.core.control.ScreenCaptureManager
 import com.mories.control_droid.core.model.DeviceAction
 import fi.iki.elonen.NanoHTTPD
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileInputStream
 import java.util.concurrent.atomic.AtomicBoolean
@@ -15,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Singleton HTTP server yang berjalan di device TARGET.
  * Berfungsi untuk merespons scan dari device CONTROLLER melalui endpoint /ping.
  */
-object TargetHttpServer : NanoHTTPD(8080) {
+object TargetHttpServer : NanoHTTPD(ConstantValue.PORT_VALUE) {
 
     private val isRunning = AtomicBoolean(false)
     private var getContext: (() -> Context)? = null
@@ -27,7 +30,7 @@ object TargetHttpServer : NanoHTTPD(8080) {
         try {
             start(SOCKET_READ_TIMEOUT, false)
             isRunning.set(true)
-            Log.d("TargetHttpServer", "✅ Started on port 8080")
+            Log.d("TargetHttpServer", "✅ Started on port ${ConstantValue.PORT_VALUE}")
         } catch (e: Exception) {
             Log.e("TargetHttpServer", "❌ Failed to start: ${e.message}")
         }
@@ -57,13 +60,14 @@ object TargetHttpServer : NanoHTTPD(8080) {
                     Log.d("TargetHttpServer", "Performing action: ${action.name}")
 
                     when (action) {
-                        DeviceAction.CAPTURE_SCREEN -> runBlocking {
-                            val bitmap = ScreenCaptureManager.captureOnceSuspend(context)
-                            if (bitmap != null) {
-                                ScreenCaptureManager.saveBitmap(context, bitmap)
+                        DeviceAction.CAPTURE_SCREEN -> {
+                            CoroutineScope(Dispatchers.Default).launch {
+                                val bitmap = ScreenCaptureManager.captureOnceSuspend(context)
+                                if (bitmap != null) {
+                                    ScreenCaptureManager.saveBitmap(context, bitmap)
+                                }
                             }
                         }
-
                         else -> AccessibilityController.performAction(action)
                     }
                 }

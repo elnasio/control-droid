@@ -1,7 +1,7 @@
 package com.mories.control_droid.core.networking
 
 import android.util.Log
-import com.google.gson.Gson
+import com.mories.control_droid.core.ConstantValue
 import com.mories.control_droid.core.model.DeviceAction
 import okhttp3.Call
 import okhttp3.Callback
@@ -21,8 +21,6 @@ class LocalWebSocketClient(
     private val targetPort: Int = 8080,
     private val pin: String,
 ) {
-
-    private val gson = Gson()
     private var webSocket: WebSocket? = null
     private val client = OkHttpClient.Builder().pingInterval(10, TimeUnit.SECONDS).build()
 
@@ -66,10 +64,9 @@ class LocalWebSocketClient(
         if (isConnected && webSocket != null) {
             webSocket?.send(action.command)
         } else {
-            // Fallback ke HTTP jika WebSocket tidak aktif
             val requestBody = action.command.toRequestBody("text/plain".toMediaTypeOrNull())
             val request =
-                Request.Builder().url("http://$targetIp:8080/action").post(requestBody).build()
+                Request.Builder().url("http://$targetIp:${ConstantValue.PORT_VALUE}/action").post(requestBody).build()
             client.newCall(request).enqueue(object : Callback {
                 override fun onResponse(call: Call, response: Response) {
                     Log.d(

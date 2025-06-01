@@ -1,6 +1,7 @@
 package com.mories.control_droid.core.control
 
 import android.util.Log
+import com.mories.control_droid.core.ConstantValue
 import com.mories.control_droid.core.model.PairedDevice
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -14,7 +15,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 object DeviceScanner {
-    suspend fun scanLocalDevices(port: Int = 8080): List<PairedDevice> = coroutineScope {
+    suspend fun scanLocalDevices(port: Int = ConstantValue.PORT_VALUE): List<PairedDevice> = coroutineScope {
         val localIp = getLocalIp()?.also {
             Log.d("DeviceScanner", "Local IP: $it")
         } ?: run {
