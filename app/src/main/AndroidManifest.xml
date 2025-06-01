@@ -33,6 +33,11 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".features.target.ScreenPermissionActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Controldroid" />
+
         <service
             android:name=".core.control.AccessibilityController"
             android:exported="false"

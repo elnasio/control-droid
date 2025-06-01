@@ -65,10 +65,11 @@ object TargetHttpServer : NanoHTTPD(8080) {
 
             session.uri == "/screenshot" && session.method == Method.GET -> {
                 val file = File(context.cacheDir, "screenshot.png")
-                if (file.exists()) {
+                return if (file.exists() && file.length() > 0) {
                     val stream = FileInputStream(file)
                     newChunkedResponse(Response.Status.OK, "image/png", stream)
                 } else {
+                    Log.w("TargetHttpServer", "Screenshot not available.")
                     newFixedLengthResponse(
                         Response.Status.NOT_FOUND, MIME_PLAINTEXT, "No Screenshot"
                     )

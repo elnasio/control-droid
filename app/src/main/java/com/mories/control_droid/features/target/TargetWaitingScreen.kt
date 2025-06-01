@@ -61,6 +61,13 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
             }) {
                 Text("Open Accessibility Settings")
             }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = {
+                val intent = Intent(context, ScreenPermissionActivity::class.java)
+                context.startActivity(intent)
+            }) {
+                Text("Grant Screenshot Permission")
+            }
         }
     }
 }
