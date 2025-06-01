@@ -1,0 +1,74 @@
+# Gradle
+.gradle/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local config
+local.properties
+*.iml
+.idea/
+*.ipr
+*.iws
+
+# IDE settings
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+/.idea/misc.xml
+/.idea/gradle.xml
+/.idea/compiler.xml
+/.idea/codeStyles/
+
+# NDK / External
+.externalNativeBuild/
+.cxx/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Crashlytics / Firebase
+crashlytics-build.properties
+fabric.properties
+
+# Unit test
+test-results/
+coverage/
+*.ec
+
+# Captures & screenshots
+captures/
+
+# Jetpack Compose
+*.kotlin_module
+
+# Android Studio Patch
+.idea/vcs.xml
+.idea/androidProfiling.xml
+
+# Lint
+lint/intermediates/
+lint/generated/
+lint/reports/
+
+# Keystore
+*.jks
+*.keystore
+
+# Mac system files
+__MACOSX/
+
+# Kotlin/Java
+*.class
+*.log
+
+# VSCode
+.vscode/
+
+# Misc
+*.orig
+*.rej
