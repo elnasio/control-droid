@@ -35,7 +35,6 @@ import com.mories.control_droid.ui.theme.ControldroidTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        HttpRelayService.start() // <----- active for controller
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         setContent {

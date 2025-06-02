@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Singleton HTTP server yang berjalan di device TARGET.
  * Berfungsi untuk merespons scan dari device CONTROLLER melalui endpoint /ping.
  */
-object TargetHttpServer : NanoHTTPD("0.0.0.0", ConstantValue.PORT_VALUE) {
+object TargetHttpServer : NanoHTTPD(ConstantValue.PORT_VALUE) {
 
     private val isRunning = AtomicBoolean(false)
     private var getContext: (() -> Context)? = null
