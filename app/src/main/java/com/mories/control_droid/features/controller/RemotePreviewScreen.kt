@@ -15,10 +15,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.ImageBitmapConfig
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -60,18 +57,12 @@ fun RemotePreviewScreen(
 
             state.bitmap != null -> {
                 Image(
-                    bitmap = state.bitmap?.asImageBitmap() ?: ImageBitmap(
-                        width = 0,
-                        height = 0,
-                        config = ImageBitmapConfig.Argb8888,
-                        hasAlpha = false,
-                        colorSpace = ColorSpaces.Srgb
-                    ),
+                    bitmap = state.bitmap!!.asImageBitmap(),
                     contentDescription = "Remote screen",
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    contentScale = ContentScale.FillWidth
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentScale = ContentScale.Fit
                 )
             }
 
