@@ -1,8 +1,11 @@
 package com.mories.control_droid.core.control
 
 import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
@@ -17,15 +20,16 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import androidx.annotation.RequiresApi
-import okhttp3.WebSocket
-import okio.ByteString
+import androidx.core.app.NotificationCompat
+import androidx.core.graphics.createBitmap
+import com.mories.control_droid.R
 import java.io.ByteArrayOutputStream
+import java.io.File
 
 class ScreenCaptureService : Service() {
 
     companion object {
         const val EXTRA_RESULT_DATA = "result_data"
-        var activeWebSocket: WebSocket? = null
     }
 
     private lateinit var mediaProjection: MediaProjection
@@ -44,21 +48,42 @@ class ScreenCaptureService : Service() {
             @Suppress("DEPRECATION")
             intent?.getParcelableExtra(EXTRA_RESULT_DATA)
         }
+
         if (resultData == null) {
             Log.e("ScreenCaptureService", "Result data null, stopping service")
             stopSelf()
             return START_NOT_STICKY
         }
 
+        // Step 1: Start Foreground First
+        val notification = NotificationCompat.Builder(this, "screen_capture_channel")
+            .setContentTitle("Remote Screen Streaming").setContentText("Streaming screen data")
+            .setSmallIcon(R.drawable.ic_launcher_background).build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                "screen_capture_channel", "Screen Capture", NotificationManager.IMPORTANCE_LOW
+            )
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                1001, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+            )
+        } else {
+            startForeground(1001, notification)
+        }
+
+        // Step 2: Baru ambil MediaProjection setelah startForeground
         val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         mediaProjection = projectionManager.getMediaProjection(Activity.RESULT_OK, resultData)
 
         startCapture()
         return START_STICKY
     }
-
     private fun startCapture() {
-        Log.i("ScreenCaptureService", "Starting screen capture")
+        Log.i("ScreenCaptureService", "📸 Starting screen capture")
 
         imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
         virtualDisplay = mediaProjection.createVirtualDisplay(
@@ -77,30 +102,29 @@ class ScreenCaptureService : Service() {
             @RequiresApi(Build.VERSION_CODES.R)
             override fun run() {
                 try {
-                    val image = imageReader.acquireLatestImage()
-                    if (image != null) {
+                    imageReader.acquireLatestImage()?.use { image ->
                         val planes = image.planes
+                        if (planes.isEmpty()) return
+
                         val buffer = planes[0].buffer
                         val pixelStride = planes[0].pixelStride
                         val rowStride = planes[0].rowStride
                         val rowPadding = rowStride - pixelStride * width
 
-                        val bitmap = Bitmap.createBitmap(
-                            width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888
-                        )
+                        val bitmap = createBitmap(width + rowPadding / pixelStride, height)
                         bitmap.copyPixelsFromBuffer(buffer)
-                        image.close()
 
                         val stream = ByteArrayOutputStream()
                         bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 50, stream)
                         val byteArray = stream.toByteArray()
 
-                        activeWebSocket?.let {
-                            it.send(ByteString.of(*byteArray))
-                        } ?: Log.w("ScreenCaptureService", "WebSocket is null")
+                        val file = File(cacheDir, "screenshot.png")
+                        file.writeBytes(byteArray)
+
+                        bitmap.recycle()
                     }
                 } catch (e: Exception) {
-                    Log.e("ScreenCaptureService", "Capture error: ${e.message}")
+                    Log.e("ScreenCaptureService", "❌ Capture error: ${e.message}")
                 } finally {
                     handler?.postDelayed(this, frameRateMs)
                 }

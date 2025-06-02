@@ -29,7 +29,8 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
 
     LaunchedEffect(Unit) {
         try {
-            TargetHttpServer.startServer { context }
+            val appContext = context.applicationContext
+            TargetHttpServer.startServer { appContext }
             if (ScreenCaptureManager.isReady()) {
                 ScreenCaptureManager.startAutoCapture(context)
             }

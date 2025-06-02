@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
 
 class LocalWebSocketClient(
     private val targetIp: String,
-    private val targetPort: Int = 8080,
+    private val targetPort: Int = ConstantValue.PORT_VALUE,
     private val pin: String,
 ) {
     private var webSocket: WebSocket? = null

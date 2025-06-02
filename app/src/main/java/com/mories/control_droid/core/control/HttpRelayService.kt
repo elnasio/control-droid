@@ -12,7 +12,7 @@ class HttpRelayService : NanoHTTPD(ConstantValue.PORT_VALUE) {
         return when {
             session.uri == "/screenshot" -> {
                 try {
-                    val url = URL("http://10.0.2.16:8080/screenshot")
+                    val url = URL("http://${ConstantValue.IP_ADDRESS}:${ConstantValue.PORT_VALUE}/screenshot")
                     val conn = url.openConnection() as HttpURLConnection
                     conn.connect()
 
