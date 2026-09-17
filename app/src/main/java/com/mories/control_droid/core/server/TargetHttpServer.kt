@@ -3,6 +3,7 @@ package com.mories.control_droid.core.server
 import android.content.Context
 import android.util.Log
 import com.mories.control_droid.core.ConstantValue
+import com.mories.control_droid.core.auth.PinVerifier
 import com.mories.control_droid.core.control.AccessibilityController
 import com.mories.control_droid.core.control.ScreenCaptureManager
 import com.mories.control_droid.core.model.DeviceAction
@@ -54,6 +55,11 @@ object TargetHttpServer : NanoHTTPD(ConstantValue.PORT_VALUE) {
             }
 
             session.uri == "/action" && session.method == Method.POST -> {
+                if (!session.hasValidPin(context)) {
+                    return newFixedLengthResponse(
+                        Response.Status.UNAUTHORIZED, MIME_PLAINTEXT, "Unauthorized"
+                    )
+                }
                 val body = session.parseBodyToString()
 
                 DeviceAction.entries.find { it.command == body }?.let { action ->
@@ -75,6 +81,11 @@ object TargetHttpServer : NanoHTTPD(ConstantValue.PORT_VALUE) {
                 newFixedLengthResponse("OK")
             }
             session.uri == "/screenshot" && session.method == Method.GET -> {
+                if (!session.hasValidPin(context)) {
+                    return newFixedLengthResponse(
+                        Response.Status.UNAUTHORIZED, MIME_PLAINTEXT, "Unauthorized"
+                    )
+                }
                 val file = File(context.cacheDir, "screenshot.png")
                 return if (file.exists() && file.length() > 0) {
                     val stream = FileInputStream(file)
@@ -102,5 +113,13 @@ object TargetHttpServer : NanoHTTPD(ConstantValue.PORT_VALUE) {
             Log.e("TargetHttpServer", "Body parse error: ${e.message}")
             ""
         }
+    }
+
+    private fun IHTTPSession.providedPin(): String? =
+        headers.entries.firstOrNull { it.key.equals("X-Control-Pin", ignoreCase = true) }?.value
+
+    private fun IHTTPSession.hasValidPin(context: Context): Boolean {
+        val verifier = PinVerifier(context)
+        return verifier.isPinSet() && verifier.verify(providedPin().orEmpty())
     }
 }

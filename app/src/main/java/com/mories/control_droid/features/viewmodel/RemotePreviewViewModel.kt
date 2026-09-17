@@ -27,12 +27,12 @@ class RemotePreviewViewModel : ViewModel() {
 
     fun onEvent(event: RemotePreviewEvent) {
         when (event) {
-            is RemotePreviewEvent.StartPolling -> startPolling(event.ip)
+            is RemotePreviewEvent.StartPolling -> startPolling(event.ip, event.pin)
             is RemotePreviewEvent.StopPolling -> stopPolling()
         }
     }
 
-    private fun startPolling(ip: String) {
+    private fun startPolling(ip: String, pin: String) {
         stopPolling()
 
         pollingJob = viewModelScope.launch {
@@ -42,18 +42,26 @@ class RemotePreviewViewModel : ViewModel() {
             while (isActive) {
                 try {
                     val bitmap = withContext(Dispatchers.IO) {
-                        val request = Request.Builder().url(url).build()
+                        val request = Request.Builder()
+                            .url(url)
+                            .addHeader("X-Control-Pin", pin)
+                            .build()
                         client.newCall(request).execute().use { response ->
-                            if (response.isSuccessful) {
-                                response.body?.bytes()?.let { bytes ->
-                                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                                }
-                            } else {
+                            if (!response.isSuccessful) {
                                 _uiState.update {
-                                    it.copy(error = "HTTP error: ${response.code}")
+                                    it.copy(isLoading = false, error = "HTTP error: ${response.code}")
                                 }
-                                null
+                                return@use null
                             }
+                            val decoded = response.body?.bytes()?.let { bytes ->
+                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            }
+                            if (decoded == null) {
+                                _uiState.update {
+                                    it.copy(isLoading = false, error = "Failed to decode image")
+                                }
+                            }
+                            decoded
                         }
                     }
 
@@ -61,15 +69,11 @@ class RemotePreviewViewModel : ViewModel() {
                         _uiState.update { state ->
                             state.copy(isLoading = false, bitmap = bmp, error = null)
                         }
-                    } ?: run {
-                        _uiState.update {
-                            it.copy(error = "Failed to decode image")
-                        }
                     }
 
                 } catch (e: Exception) {
                     _uiState.update {
-                        it.copy(error = e.message ?: "Unknown error")
+                        it.copy(isLoading = false, error = e.message ?: "Unknown error")
                     }
                 }
 

@@ -8,7 +8,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
@@ -19,7 +23,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mories.control_droid.core.auth.RoleManager
-import com.mories.control_droid.core.control.HttpRelayService
 import com.mories.control_droid.core.model.DeviceRole.CONTROLLER
 import com.mories.control_droid.core.model.DeviceRole.TARGET
 import com.mories.control_droid.core.storage.PairedDeviceStore
@@ -43,7 +46,6 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
                 val roleManager = remember { RoleManager(context) }
                 val store = remember { PairedDeviceStore(context) }
-                val devices = remember { store.getAll() }
 
                 val initialRoleManager = RoleManager(applicationContext)
                 val startDestination = if (initialRoleManager.hasRole()) {
@@ -77,7 +79,10 @@ class MainActivity : ComponentActivity() {
                         }
 
                         composable(NavigationTarget.Home.route) {
-                            HomeScreen(devices = devices, onDeviceClick = { selected ->
+                            var homeDevices by remember { mutableStateOf(store.getAll()) }
+                            LaunchedEffect(Unit) { homeDevices = store.getAll() }
+
+                            HomeScreen(devices = homeDevices, onDeviceClick = { selected ->
                                 navController.navigate(NavigationTarget.Control.withArg(selected.id))
                             }, onAddClick = {
                                 navController.navigate(NavigationTarget.Pair.route)

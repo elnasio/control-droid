@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.mories.control_droid.core.model.DeviceAction
 import com.mories.control_droid.core.model.PairedDevice
-import com.mories.control_droid.core.networking.LocalWebSocketClient
+import com.mories.control_droid.core.networking.DeviceHttpClient
 import com.mories.control_droid.ui.NavigationTarget
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -34,14 +34,11 @@ import com.mories.control_droid.ui.NavigationTarget
 fun DeviceControlScreen(
     navController: NavController, device: PairedDevice
 ) {
-    val client = remember { LocalWebSocketClient(device.ip, pin = device.pin) }
+    val client = remember { DeviceHttpClient(device.ip, pin = device.pin) }
     var connected by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        client.connect {
-            // Optional: handle response
-        }
-        connected = true
+        client.ping { reachable -> connected = reachable }
     }
 
     Scaffold(

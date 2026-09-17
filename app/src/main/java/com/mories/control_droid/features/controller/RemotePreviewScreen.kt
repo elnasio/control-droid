@@ -33,7 +33,7 @@ fun RemotePreviewScreen(
     val state by viewModel.uiState.collectAsState()
 
     LaunchedEffect(device.ip) {
-        viewModel.onEvent(RemotePreviewEvent.StartPolling(device.ip))
+        viewModel.onEvent(RemotePreviewEvent.StartPolling(device.ip, device.pin))
     }
 
     DisposableEffect(Unit) {

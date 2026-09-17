@@ -4,10 +4,6 @@ data class PairedDevice(
     val id: String, val name: String, val ip: String, val pin: String, val lastConnected: Long
 )
 
-data class ControlCommand(
-    val pin: String, val action: DeviceAction, val payload: Map<String, String>? = null
-)
-
 enum class DeviceRole {
     CONTROLLER, TARGET
 }
