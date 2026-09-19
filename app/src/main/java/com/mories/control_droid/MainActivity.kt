@@ -4,9 +4,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -15,7 +21,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -23,6 +31,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mories.control_droid.core.auth.RoleManager
+import com.mories.control_droid.core.diagnostics.CrashLogger
 import com.mories.control_droid.core.model.DeviceRole.CONTROLLER
 import com.mories.control_droid.core.model.DeviceRole.TARGET
 import com.mories.control_droid.core.storage.PairedDeviceStore
@@ -41,6 +50,7 @@ import com.mories.control_droid.ui.theme.ControldroidTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        CrashLogger.install(this)
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
@@ -51,6 +61,30 @@ class MainActivity : ComponentActivity() {
                 val roleManager = remember { RoleManager(context) }
                 val store = remember { PairedDeviceStore(context) }
                 val macroStore = remember { MacroStore(context) }
+                var lastCrash by remember { mutableStateOf(CrashLogger.readLastCrash(context)) }
+
+                lastCrash?.let { crashText ->
+                    AlertDialog(
+                        onDismissRequest = {},
+                        title = { Text("Crash terakhir terdeteksi") },
+                        text = {
+                            Text(
+                                text = crashText,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier
+                                    .heightIn(max = 400.dp)
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState())
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                CrashLogger.clear(context)
+                                lastCrash = null
+                            }) { Text("Tutup & hapus") }
+                        }
+                    )
+                }
 
                 val initialRoleManager = RoleManager(applicationContext)
                 val startDestination = if (initialRoleManager.hasRole()) {
