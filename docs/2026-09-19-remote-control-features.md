@@ -36,6 +36,7 @@ The dependency direction is `:app` → `:core` and `:app` → `:ui-components`. 
 - `AddDeviceScreen` now uses the reusable `AppToolbar` with the standard arrow-back navigation.
 - `MacroScreen` now uses the same reusable `AppToolbar` and root-inset handling.
 - Shared UI now includes clearer device cards, filled-tonal control buttons, and a reusable connection `StatusBadge` for the screen redesign.
+- Added a reusable `ControlPad` with a Controller-side toggle; directional buttons send normalized swipe gestures through the existing `/gesture` contract.
 - Toolbar screens disable duplicate system-bar insets because `MainActivity` already applies the root window inset; this removes the extra top gap above the toolbar.
 - Device hardware behavior, MediaProjection capture, and real cross-device networking still require instrumentation or manual device validation.
 

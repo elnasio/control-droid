@@ -64,7 +64,7 @@ Build release setelah seluruh nilai tersedia:
 ./gradlew :app:assembleRelease
 ```
 
-Nama output release mengikuti format `control-droid-<versionName>-<versionCode>.apk`, contohnya `control-droid-1.0-1.apk`, di bawah `app/build/outputs/apk/release/`.
+Nama output release mengikuti format `control-droid-<versionName>-<versionCode>.apk`, contohnya `control-droid-1.0.1-2.apk`, di bawah `app/build/outputs/apk/release/`.
 
 Build release mengaktifkan R8 melalui `isMinifyEnabled = true` dan resource shrinking melalui `isShrinkResources = true`. Hasil mapping obfuscation berada di `app/build/outputs/mapping/release/mapping.txt`; simpan file ini untuk kebutuhan crash deobfuscation dan jangan commit ke repository.
 
@@ -118,6 +118,7 @@ Discovery menggunakan prefix `/24`; jika jaringan tidak sesuai asumsi ini, gunak
 - Status badge menunjukkan hasil ping awal.
 - Tombol Back/Home/Recent mengirim aksi global.
 - Live preview hanya aktif jika Target reachable dan capture permission sudah diberikan.
+- Toggle **Control pad** menampilkan tombol atas/bawah/kiri/kanan jika Target reachable. Setiap tombol mengirim swipe terarah ke area tengah layar Target.
 - Clipboard mengirim teks tanpa paste.
 - Kirim dan tempel membutuhkan input editable yang sedang fokus pada Target.
 

@@ -34,7 +34,7 @@ Robolectric dipakai untuk Android `Context`, SharedPreferences, dan Bitmap. Mock
 
 | Test | Coverage |
 |---|---|
-| `ComponentsSmokeTest` | Render/click `ControlActionButton`, render `DeviceCard`, render/click `AppToolbar`. |
+| `ComponentsSmokeTest` | Render/click `ControlActionButton`, render `DeviceCard`, render/click `AppToolbar`, dan callback `ControlPad`. |
 
 Test ini berada di `androidTest`, sehingga compile dapat dilakukan tanpa device tetapi eksekusi membutuhkan emulator/perangkat.
 

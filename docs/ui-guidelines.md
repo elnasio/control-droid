@@ -67,6 +67,13 @@ Root `MainActivity` sudah menerapkan edge-to-edge inset. Jangan menggandakan pad
 - Gunakan `enabled` saat capability atau koneksi belum siap.
 - Gunakan `modifier` untuk full-width/weight sesuai layout.
 
+### `ControlPad`
+
+- Tampilkan melalui toggle pada `DeviceControlScreen` saat koneksi Target aktif.
+- Pad hanya mengelola rendering tombol arah dan callback; network call tetap berada di screen/container.
+- Setiap tombol arah wajib memiliki `contentDescription`.
+- Implementasi saat ini menerjemahkan arah menjadi swipe normalized melalui kontrak `/gesture`, bukan native DPAD key event.
+
 ### Dialog dan preview surface
 
 - `PinDialog` hanya mengelola input dan callback, bukan menyimpan PIN.

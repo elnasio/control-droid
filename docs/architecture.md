@@ -48,6 +48,7 @@ Compose library tanpa dependency ke `:app` atau `:core`. Komponen harus stateles
 
 - `AppToolbar`
 - `ControlActionButton`
+- `ControlPad`
 - `DeviceCard`
 - `PairingQrCard`
 - `PinDialog`
@@ -119,6 +120,8 @@ Discovery hanya menemukan device dalam asumsi subnet `/24`; router, VPN, guest i
 - Live preview → `POST /action` `capture_screen`, lalu navigasi ke preview.
 - Clipboard → `POST /clipboard`.
 - Clipboard + paste → `POST /clipboard` dengan `paste=true`.
+
+Control pad berada di screen yang sama dan hanya aktif jika ping awal berhasil. Arah atas/bawah/kiri/kanan dipetakan menjadi `GestureRequest` swipe normalized dari area tengah layar Target, lalu dikirim melalui endpoint `/gesture` yang sudah ada.
 
 ### Remote preview
 

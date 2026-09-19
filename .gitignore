@@ -43,6 +43,9 @@ coverage/
 # Captures & screenshots
 captures/
 
+# Release build artifacts
+/app/release/
+
 # Jetpack Compose
 *.kotlin_module
 

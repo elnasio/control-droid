@@ -46,7 +46,7 @@ Dokumentasi terperinci tersedia di [docs/README.md](docs/README.md), termasuk:
 ```
 
 - `:core`: Android library tanpa Compose untuk model, auth, storage, networking, HTTP server, AccessibilityService controller, screen capture manager, dan macro runner.
-- `:ui-components`: Compose library tanpa dependency ke `:app` atau `:core`. Berisi theme dan komponen UI reusable seperti `AppToolbar`, `DeviceCard`, `StatusBadge`, PIN dialog, pairing QR card, action button, dan remote preview surface. Setiap component memiliki `@Preview`.
+- `:ui-components`: Compose library tanpa dependency ke `:app` atau `:core`. Berisi theme dan komponen UI reusable seperti `AppToolbar`, `DeviceCard`, `StatusBadge`, `ControlPad`, PIN dialog, pairing QR card, action button, dan remote preview surface. Setiap component memiliki `@Preview`.
 - `:app`: APK utama yang berisi Activity, navigation, feature screen, ViewModel, manifest, service entrypoint, dan wiring dependency.
 
 Build utama tetap menghasilkan satu APK dari `:app`:

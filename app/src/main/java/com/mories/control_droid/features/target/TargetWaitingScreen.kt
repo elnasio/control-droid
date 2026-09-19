@@ -57,7 +57,11 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
         }
     }
     val qrBitmap = remember(qrPayload) {
-        qrPayload?.let { PairingQrCodeGenerator.create(PairingQrPayload.encode(it), 420) }
+        qrPayload?.let {
+            runCatching { PairingQrCodeGenerator.create(PairingQrPayload.encode(it), 420) }
+                .onFailure { e -> Log.e("TargetWaiting", "QR generation failed: ${e.message}") }
+                .getOrNull()
+        }
     }
 
     LaunchedEffect(Unit) {

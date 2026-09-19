@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +14,7 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,14 +23,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.mories.control_droid.core.model.DeviceAction
+import com.mories.control_droid.core.model.GestureRequest
+import com.mories.control_droid.core.model.GestureType
 import com.mories.control_droid.core.model.PairedDevice
 import com.mories.control_droid.core.networking.DeviceHttpClient
 import com.mories.control_droid.ui.NavigationTarget
 import com.mories.control_droid.ui.components.AppToolbar
 import com.mories.control_droid.ui.components.ControlActionButton
+import com.mories.control_droid.ui.components.ControlPad
+import com.mories.control_droid.ui.components.ControlPadDirection
 import com.mories.control_droid.ui.components.StatusBadge
 
 @Composable
@@ -41,6 +48,7 @@ fun DeviceControlScreen(
     var connected by remember { mutableStateOf(false) }
     var clipboardText by remember { mutableStateOf("") }
     var clipboardStatus by remember { mutableStateOf<String?>(null) }
+    var showControlPad by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         client.ping { reachable -> connected = reachable }
@@ -96,6 +104,40 @@ fun DeviceControlScreen(
                             modifier = Modifier.fillMaxWidth(),
                             onClick = { client.sendAction(DeviceAction.GLOBAL_RECENT) }
                         )
+                    }
+                }
+            }
+            item {
+                ElevatedCard {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Control pad", style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    text = "Tampilkan tombol arah untuk mengirim swipe terarah ke Target.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = showControlPad,
+                                onCheckedChange = { showControlPad = it },
+                                enabled = connected
+                            )
+                        }
+                        if (showControlPad) {
+                            ControlPad(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                                enabled = connected,
+                                onDirectionClick = { direction ->
+                                    client.sendGesture(direction.toGestureRequest())
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -167,5 +209,44 @@ fun DeviceControlScreen(
                 }
             }
         }
+    }
+}
+
+private fun ControlPadDirection.toGestureRequest(): GestureRequest {
+    val center = 0.5f
+    val offset = 0.2f
+    return when (this) {
+        ControlPadDirection.UP -> GestureRequest(
+            type = GestureType.SWIPE,
+            startX = center,
+            startY = center + offset / 2,
+            endX = center,
+            endY = center - offset / 2,
+            durationMs = 300
+        )
+        ControlPadDirection.DOWN -> GestureRequest(
+            type = GestureType.SWIPE,
+            startX = center,
+            startY = center - offset / 2,
+            endX = center,
+            endY = center + offset / 2,
+            durationMs = 300
+        )
+        ControlPadDirection.LEFT -> GestureRequest(
+            type = GestureType.SWIPE,
+            startX = center + offset / 2,
+            startY = center,
+            endX = center - offset / 2,
+            endY = center,
+            durationMs = 300
+        )
+        ControlPadDirection.RIGHT -> GestureRequest(
+            type = GestureType.SWIPE,
+            startX = center - offset / 2,
+            startY = center,
+            endX = center + offset / 2,
+            endY = center,
+            durationMs = 300
+        )
     }
 }

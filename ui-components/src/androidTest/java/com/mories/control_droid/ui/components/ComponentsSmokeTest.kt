@@ -37,7 +37,7 @@ class ComponentsSmokeTest {
         }
 
         composeTestRule.onNodeWithText("Living Room").assertExists()
-        composeTestRule.onNodeWithText("IP: 192.168.1.20").assertExists()
+        composeTestRule.onNodeWithText("IP address: 192.168.1.20").assertExists()
     }
 
     @Test
@@ -57,5 +57,18 @@ class ComponentsSmokeTest {
         composeTestRule.onNodeWithText("Save").performClick()
 
         assertTrue(clicked)
+    }
+
+    @Test
+    fun controlPad_invokesDirectionHandler() {
+        var direction: ControlPadDirection? = null
+
+        composeTestRule.setContent {
+            ControlPad(onDirectionClick = { direction = it })
+        }
+
+        composeTestRule.onNodeWithContentDescription("Move up").performClick()
+
+        assertTrue(direction == ControlPadDirection.UP)
     }
 }
