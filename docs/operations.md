@@ -66,6 +66,8 @@ Build release setelah seluruh nilai tersedia:
 
 Nama output release mengikuti format `control-droid-<versionName>-<versionCode>.apk`, contohnya `control-droid-1.0-1.apk`, di bawah `app/build/outputs/apk/release/`.
 
+Build release mengaktifkan R8 melalui `isMinifyEnabled = true` dan resource shrinking melalui `isShrinkResources = true`. Hasil mapping obfuscation berada di `app/build/outputs/mapping/release/mapping.txt`; simpan file ini untuk kebutuhan crash deobfuscation dan jangan commit ke repository.
+
 Jika alias atau password belum disediakan, build debug tetap dapat dijalankan, tetapi build release tidak boleh dianggap signed sampai Gradle berhasil memakai keystore tersebut.
 
 ## 3. Setup dua perangkat
