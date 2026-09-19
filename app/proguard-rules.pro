@@ -12,6 +12,17 @@
 #   public *;
 #}
 
+# Gson serializes these models by reflection and their field names are part of
+# the Controller/Target HTTP contract.
+-keepattributes Signature
+-keepattributes *Annotation*
+-keep class com.mories.control_droid.core.model.** { *; }
+
+# Android entrypoints referenced by the manifest and the MediaProjection flow.
+-keep class com.mories.control_droid.core.control.AccessibilityController { *; }
+-keep class com.mories.control_droid.features.target.ScreenCaptureService { *; }
+-keep class com.mories.control_droid.features.target.ScreenPermissionActivity { *; }
+
 # Uncomment this to preserve the line number information for
 # debugging stack traces.
 #-keepattributes SourceFile,LineNumberTable
