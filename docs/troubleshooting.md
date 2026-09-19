@@ -145,3 +145,25 @@ Gunakan tag berikut ketika membaca logcat:
 | `ScreenCapture` | Projection, capture, save PNG. |
 | `RemotePreviewViewModel` | Polling URL, stop polling, HTTP/decode error. |
 | `AddDeviceScreen` | Hasil scan perangkat. |
+
+## 11. Force close di build release, tapi normal di build debug
+
+Build debug tidak menjalankan R8 (`isMinifyEnabled = false`), jadi bug yang hanya muncul akibat shrinking/obfuscation **tidak akan pernah terlihat** kalau hanya menguji `assembleDebug`/`installDebug`. Kalau ada laporan force close yang tidak bisa direproduksi di build debug, build dan uji `:app:assembleRelease` secara langsung sebelum menyimpulkan apa pun.
+
+Kasus nyata yang pernah terjadi: `PairedDeviceStore`/`MacroStore` membangun `object : TypeToken<List<X>>() {}` saat runtime supaya Gson tahu tipe generic-nya. Di build release, R8 bisa menghapus/menggabungkan anonymous class tersebut walau `-keepattributes Signature` sudah ada, sehingga Gson melempar:
+
+```
+java.lang.IllegalStateException: TypeToken must be created with a type argument: new TypeToken<...>() {};
+When using code shrinkers (ProGuard, R8, ...) make sure that generic signatures are preserved.
+```
+
+Efeknya persis seperti "klik X langsung force close tanpa tampilan apa pun", karena crash terjadi di tengah composable pertama yang memanggil `store.getAll()`/`macroStore.getAll()` (mis. navigasi ke `Preview/local` setelah `Pilih Target`). Fix-nya ada di `app/proguard-rules.pro`:
+
+```
+-keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
+-keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
+```
+
+Kalau menambah pola `TypeToken<...>() {}` baru di tempat lain, rule di atas sudah menutupinya (rule-nya generik, bukan per-kelas) — tapi tetap wajib diverifikasi dengan `assembleRelease` + install nyata, bukan cuma `assembleDebug`.
+
+`CrashLogger` (lihat `core/diagnostics/CrashLogger.kt`) sangat membantu untuk kasus begini: dia menangkap *seluruh* uncaught exception di app (bukan cuma di satu layar) dan menampilkannya sebagai dialog scrollable saat app dibuka lagi, jadi device yang tidak bisa disambungkan ke `adb`/komputer pun bisa "melapor sendiri" stack trace persisnya lewat screenshot.

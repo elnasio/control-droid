@@ -40,6 +40,12 @@ The dependency direction is `:app` → `:core` and `:app` → `:ui-components`. 
 - Toolbar screens disable duplicate system-bar insets because `MainActivity` already applies the root window inset; this removes the extra top gap above the toolbar.
 - Device hardware behavior, MediaProjection capture, and real cross-device networking still require instrumentation or manual device validation.
 
+## Release-build crash fix and on-device diagnostics
+
+- Fixed a release-only (R8/ProGuard) crash: `PairedDeviceStore`/`MacroStore` build `object : TypeToken<List<X>>() {}` at runtime for Gson, and R8 could strip/merge that anonymous subclass even with `Signature` kept, throwing `IllegalStateException: TypeToken must be created with a type argument` the instant any screen called `getAll()`. This reproduced as an immediate force-close after choosing the Target role (which navigates through `getDeviceById`), and was invisible to `./gradlew test`/`assembleDebug` since neither runs R8. Fixed with explicit `-keep` rules for `TypeToken` and its subclasses in `app/proguard-rules.pro`; verified against a real `assembleRelease` APK installed on a physical device, not just debug builds.
+- Added `CrashLogger` (`:core`), a `Thread.UncaughtExceptionHandler` installed in `MainActivity.onCreate` that saves any uncaught crash anywhere in the app (time, thread, device model/API, full stack trace) to a local file before delegating to the previous handler. `MainActivity` shows the last saved crash as a scrollable dialog on next launch. This made the release-only crash above diagnosable from a screenshot on a device with no adb/computer access.
+- See `docs/troubleshooting.md` #11 and `docs/testing.md` §6 for the general lesson: `test`/`assembleDebug` passing does not prove a release build is safe; R8-specific bugs require testing `assembleRelease` directly.
+
 ## Documentation completion
 
 Dokumentasi repo dilengkapi dengan:

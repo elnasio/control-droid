@@ -18,6 +18,15 @@
 -keepattributes *Annotation*
 -keep class com.mories.control_droid.core.model.** { *; }
 
+# PairedDeviceStore/MacroStore build `object : TypeToken<List<X>>() {}` at
+# runtime so Gson can deserialize a List<X>. R8 can merge/strip that anonymous
+# subclass even with Signature kept, which drops the generic type information
+# Gson needs and crashes with "TypeToken must be created with a type argument"
+# the moment getAll() runs in a release build. Keep TypeToken and its
+# subclasses so the generic signature survives.
+-keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
+-keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
+
 # Android entrypoints referenced by the manifest and the MediaProjection flow.
 -keep class com.mories.control_droid.core.control.AccessibilityController { *; }
 -keep class com.mories.control_droid.features.target.ScreenCaptureService { *; }
