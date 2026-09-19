@@ -3,11 +3,12 @@ package com.mories.control_droid.features.target
 import android.content.Intent
 import android.provider.Settings
 import android.util.Log
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
@@ -25,12 +26,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.mories.control_droid.core.auth.PinVerifier
-import com.mories.control_droid.core.auth.PairingTokenStore
 import com.mories.control_droid.core.ConstantValue
-import com.mories.control_droid.core.control.ScreenCaptureManager
+import com.mories.control_droid.core.auth.PairingTokenStore
+import com.mories.control_droid.core.auth.PinVerifier
 import com.mories.control_droid.core.control.NetworkAddress
 import com.mories.control_droid.core.control.PairingQrCodeGenerator
+import com.mories.control_droid.core.control.ScreenCaptureManager
 import com.mories.control_droid.core.model.PairingQrPayload
 import com.mories.control_droid.core.server.TargetHttpServer
 import com.mories.control_droid.ui.components.AppToolbar
@@ -38,28 +39,69 @@ import com.mories.control_droid.ui.components.PairingQrCard
 import com.mories.control_droid.ui.components.PinDialog
 import com.mories.control_droid.ui.components.StatusBadge
 
+private const val TAG = "TargetWaiting"
+
+private data class TargetSession(
+    val pinVerifier: PinVerifier,
+    val pairingTokenStore: PairingTokenStore,
+    val initialIsPinSet: Boolean,
+    val initialToken: String
+)
+
+private fun describeError(t: Throwable): String = "${t::class.java.simpleName}: ${t.message ?: "no message"}"
+
 @Composable
 fun TargetWaitingScreen(deviceName: String = "This Device") {
     val context = LocalContext.current
-    val pinVerifier = remember { PinVerifier(context) }
-    val pairingTokenStore = remember { PairingTokenStore(context) }
-    var isPinSet by remember { mutableStateOf(pinVerifier.isPinSet()) }
-    var pairingToken by remember { mutableStateOf(pairingTokenStore.getOrCreateToken()) }
-    var showPinDialog by remember { mutableStateOf(false) }
-    val qrPayload = remember(deviceName, pairingToken) {
-        NetworkAddress.localIpv4()?.let { ip ->
-            PairingQrPayload(
-                name = deviceName,
-                ip = ip,
-                port = ConstantValue.PORT_VALUE,
-                token = pairingToken
+
+    val sessionResult = remember {
+        runCatching {
+            val pinVerifier = PinVerifier(context)
+            val pairingTokenStore = PairingTokenStore(context)
+            TargetSession(
+                pinVerifier = pinVerifier,
+                pairingTokenStore = pairingTokenStore,
+                initialIsPinSet = pinVerifier.isPinSet(),
+                initialToken = pairingTokenStore.getOrCreateToken()
             )
-        }
+        }.onFailure { e -> Log.e(TAG, "Target session setup failed", e) }
+    }
+
+    val session = sessionResult.getOrNull()
+    if (session == null) {
+        TargetSetupErrorScreen(sessionResult.exceptionOrNull())
+        return
+    }
+
+    val pinVerifier = session.pinVerifier
+    val pairingTokenStore = session.pairingTokenStore
+    var isPinSet by remember { mutableStateOf(session.initialIsPinSet) }
+    var pairingToken by remember { mutableStateOf(session.initialToken) }
+    var showPinDialog by remember { mutableStateOf(false) }
+    var qrError by remember { mutableStateOf<String?>(null) }
+
+    val qrPayload = remember(deviceName, pairingToken) {
+        runCatching {
+            NetworkAddress.localIpv4()?.let { ip ->
+                PairingQrPayload(
+                    name = deviceName,
+                    ip = ip,
+                    port = ConstantValue.PORT_VALUE,
+                    token = pairingToken
+                )
+            }
+        }.onFailure { e ->
+            Log.e(TAG, "Resolving local IP failed", e)
+            qrError = describeError(e)
+        }.getOrNull()
     }
     val qrBitmap = remember(qrPayload) {
         qrPayload?.let {
             runCatching { PairingQrCodeGenerator.create(PairingQrPayload.encode(it), 420) }
-                .onFailure { e -> Log.e("TargetWaiting", "QR generation failed: ${e.message}") }
+                .onFailure { e ->
+                    Log.e(TAG, "QR generation failed", e)
+                    qrError = describeError(e)
+                }
                 .getOrNull()
         }
     }
@@ -72,7 +114,7 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
                 ScreenCaptureManager.startAutoCapture(context)
             }
         } catch (e: Exception) {
-            Log.e("TargetWaiting", "Failed to start server: ${e.message}")
+            Log.e(TAG, "Failed to start server: ${e.message}")
         }
     }
 
@@ -80,8 +122,9 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
         PinSetupDialog(
             onDismiss = { showPinDialog = false },
             onConfirm = { pin ->
-                pinVerifier.setPin(pin)
-                isPinSet = true
+                runCatching { pinVerifier.setPin(pin) }
+                    .onSuccess { isPinSet = true }
+                    .onFailure { e -> Log.e(TAG, "Failed to set PIN", e) }
                 showPinDialog = false
             }
         )
@@ -96,7 +139,7 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
                 .fillMaxSize()
                 .padding(padding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
                 Text("Perangkat siap digunakan", style = MaterialTheme.typography.headlineSmall)
@@ -123,13 +166,17 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
                         qrBitmap?.let { bitmap ->
                             PairingQrCard(
                                 bitmap = bitmap.asImageBitmap(),
-                                onRegenerate = { pairingToken = pairingTokenStore.regenerateToken() },
+                                onRegenerate = {
+                                    runCatching { pairingTokenStore.regenerateToken() }
+                                        .onSuccess { newToken -> pairingToken = newToken }
+                                        .onFailure { e -> Log.e(TAG, "Failed to regenerate token", e) }
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 12.dp)
                             )
                         } ?: Text(
-                            "Alamat jaringan belum tersedia.",
+                            qrError ?: "Alamat jaringan belum tersedia.",
                             modifier = Modifier.padding(top = 12.dp),
                             color = MaterialTheme.colorScheme.error
                         )
@@ -199,6 +246,36 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TargetSetupErrorScreen(error: Throwable?) {
+    Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = { AppToolbar(title = "Target mode") }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp)
+        ) {
+            Text("Gagal menyiapkan mode Target", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                text = "Terjadi error saat menyiapkan perangkat ini sebagai Target. " +
+                    "Kirim pesan error di bawah ini agar bisa diperbaiki:",
+                modifier = Modifier.padding(top = 8.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            ElevatedCard(modifier = Modifier.padding(top = 16.dp)) {
+                Text(
+                    text = error?.let(::describeError) ?: "Kesalahan tidak diketahui",
+                    modifier = Modifier.padding(16.dp),
+                    color = MaterialTheme.colorScheme.error
+                )
             }
         }
     }
