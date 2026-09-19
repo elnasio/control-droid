@@ -39,6 +39,35 @@ git diff --check
 
 APK debug berada di `app/build/outputs/apk/debug/app-debug.apk` setelah build berhasil.
 
+## 2.1 Release signing
+
+`app` memiliki `release` signing config yang menggunakan keystore lokal berikut sebagai default:
+
+```text
+/Users/morieshutapea/AndroidStudioProjects/control-droid/control-droid.jks
+```
+
+Keystore diabaikan oleh Git melalui `*.jks`. Alias dan password disimpan di `local.properties`, yang juga diabaikan oleh Git. Konfigurasi lokal yang digunakan saat ini:
+
+```properties
+controlDroid.keystorePath=/Users/morieshutapea/AndroidStudioProjects/control-droid/control-droid.jks
+controlDroid.storePassword=<keystore-password>
+controlDroid.keyAlias=<key-alias>
+controlDroid.keyPassword=<key-password>
+```
+
+Untuk checkout lain atau CI, nilai yang sama dapat diberikan melalui Gradle properties atau environment variable `CONTROL_DROID_KEYSTORE_PATH`, `CONTROL_DROID_STORE_PASSWORD`, `CONTROL_DROID_KEY_ALIAS`, dan `CONTROL_DROID_KEY_PASSWORD`. Jangan commit `local.properties` atau menyalin password ke dokumentasi publik.
+
+Build release setelah seluruh nilai tersedia:
+
+```bash
+./gradlew :app:assembleRelease
+```
+
+Nama output release mengikuti format `control-droid-<versionName>-<versionCode>.apk`, contohnya `control-droid-1.0-1.apk`, di bawah `app/build/outputs/apk/release/`.
+
+Jika alias atau password belum disediakan, build debug tetap dapat dijalankan, tetapi build release tidak boleh dianggap signed sampai Gradle berhasil memakai keystore tersebut.
+
 ## 3. Setup dua perangkat
 
 ### 3.1 Target
