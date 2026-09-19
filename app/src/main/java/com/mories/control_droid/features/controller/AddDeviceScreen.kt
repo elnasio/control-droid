@@ -41,6 +41,7 @@ import java.util.UUID
 
 @Composable
 fun AddDeviceScreen(
+    pairedDevices: List<PairedDevice>,
     onDeviceFound: (PairedDevice) -> Unit,
     onBackClick: () -> Unit
 ) {
@@ -65,8 +66,16 @@ fun AddDeviceScreen(
                 mainScope.launch(Dispatchers.Main) {
                     isScanning = false
                     if (valid) {
+                        // Reuse the existing entry's id/pin when this IP is already paired, so
+                        // re-scanning the same Target updates it in place instead of adding a
+                        // duplicate row in the paired-device list.
+                        val existing = pairedDevices.find { it.ip == payload.ip }
                         onDeviceFound(
-                            PairedDevice(
+                            existing?.copy(
+                                name = payload.name,
+                                accessToken = payload.token,
+                                lastConnected = System.currentTimeMillis()
+                            ) ?: PairedDevice(
                                 id = UUID.randomUUID().toString(),
                                 name = payload.name,
                                 ip = payload.ip,
@@ -190,10 +199,20 @@ fun AddDeviceScreen(
                     Text("Perangkat ditemukan", style = MaterialTheme.typography.titleLarge)
                 }
                 items(devices) { device ->
+                    val existing = pairedDevices.find { it.ip == device.ip }
                     DeviceCard(
-                        name = device.name,
+                        name = if (existing != null) "${device.name} (sudah dipasangkan)" else device.name,
                         ip = device.ip,
-                        onClick = { pendingDevice = device }
+                        onClick = {
+                            if (existing != null) {
+                                // Already paired at this IP: reconnect using the stored
+                                // credentials instead of demanding a new PIN, and update its
+                                // entry in place rather than adding a duplicate.
+                                onDeviceFound(existing.copy(lastConnected = System.currentTimeMillis()))
+                            } else {
+                                pendingDevice = device
+                            }
+                        }
                     )
                 }
             }

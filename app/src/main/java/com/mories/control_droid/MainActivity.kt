@@ -153,10 +153,11 @@ class MainActivity : ComponentActivity() {
 
                         composable(NavigationTarget.Pair.route) {
                             AddDeviceScreen(
+                                pairedDevices = store.getAll(),
                                 onDeviceFound = { device ->
-                                    store.saveDevice(device)
+                                    val saved = store.saveDevice(device)
                                     navController.navigate(
-                                        NavigationTarget.Control.withArg(device.id)
+                                        NavigationTarget.Control.withArg(saved.id)
                                     ) {
                                         popUpTo(NavigationTarget.Home.route)
                                     }

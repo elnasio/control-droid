@@ -18,9 +18,12 @@ class ScreenCaptureService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, -1) ?: -1
+        // Activity.RESULT_OK is -1, so a missing-extra sentinel of -1 would
+        // misclassify every successful grant as "missing". Use MIN_VALUE,
+        // which no real Activity result code will ever equal.
+        val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, Int.MIN_VALUE) ?: Int.MIN_VALUE
         val resultData = intent?.parcelableIntentExtra(EXTRA_RESULT_DATA)
-        if (resultCode < 0 || resultData == null) return START_NOT_STICKY
+        if (resultCode == Int.MIN_VALUE || resultData == null) return START_NOT_STICKY
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("ControlDroid screen sharing")

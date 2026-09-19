@@ -90,6 +90,35 @@ class CoreStateTest {
     }
 
     @Test
+    fun pairedDeviceStore_reusesExistingIdWhenIpAlreadyPaired() {
+        val store = PairedDeviceStore(context)
+        val original = PairedDevice(
+            id = UUID.randomUUID().toString(),
+            name = "Target",
+            ip = "192.168.1.5",
+            pin = "1234",
+            lastConnected = 1L
+        )
+        store.saveDevice(original)
+
+        // Re-pairing the same IP with a fresh id (as a new QR/subnet scan always produces) must
+        // update the existing row in place, not add a second entry for the same device.
+        val rescanned = PairedDevice(
+            id = UUID.randomUUID().toString(),
+            name = "Target",
+            ip = "192.168.1.5",
+            pin = "",
+            lastConnected = 2L,
+            accessToken = "new-token"
+        )
+        val resolved = store.saveDevice(rescanned)
+
+        assertEquals(original.id, resolved.id)
+        assertEquals(1, store.getAll().size)
+        assertEquals(resolved, store.getDeviceById(original.id))
+    }
+
+    @Test
     fun macroStore_replacesAndDeletesMacros() {
         val store = MacroStore(context)
         val id = UUID.randomUUID().toString()

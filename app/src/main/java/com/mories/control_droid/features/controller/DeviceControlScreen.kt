@@ -48,7 +48,19 @@ fun DeviceControlScreen(
     var connected by remember { mutableStateOf(false) }
     var clipboardText by remember { mutableStateOf("") }
     var clipboardStatus by remember { mutableStateOf<String?>(null) }
+    var navActionStatus by remember { mutableStateOf<String?>(null) }
     var showControlPad by remember { mutableStateOf(false) }
+
+    fun sendNavAction(action: DeviceAction) {
+        navActionStatus = null
+        client.sendAction(action) { success ->
+            navActionStatus = if (success) {
+                "${action.label} terkirim"
+            } else {
+                "Gagal mengirim ${action.label} — cek koneksi dan Accessibility di Target"
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         client.ping { reachable -> connected = reachable }
@@ -92,18 +104,24 @@ fun DeviceControlScreen(
                         ControlActionButton(
                             label = "Back",
                             modifier = Modifier.fillMaxWidth(),
-                            onClick = { client.sendAction(DeviceAction.GLOBAL_BACK) }
+                            enabled = connected,
+                            onClick = { sendNavAction(DeviceAction.GLOBAL_BACK) }
                         )
                         ControlActionButton(
                             label = "Home",
                             modifier = Modifier.fillMaxWidth(),
-                            onClick = { client.sendAction(DeviceAction.GLOBAL_HOME) }
+                            enabled = connected,
+                            onClick = { sendNavAction(DeviceAction.GLOBAL_HOME) }
                         )
                         ControlActionButton(
                             label = "Recent apps",
                             modifier = Modifier.fillMaxWidth(),
-                            onClick = { client.sendAction(DeviceAction.GLOBAL_RECENT) }
+                            enabled = connected,
+                            onClick = { sendNavAction(DeviceAction.GLOBAL_RECENT) }
                         )
+                        navActionStatus?.let {
+                            Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
