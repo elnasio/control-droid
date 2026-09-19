@@ -1,9 +1,31 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.services)
 }
+
+val localProperties = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use(::load)
+}
+
+fun localProperty(name: String): String? = localProperties.getProperty(name)
+
+val signingKeystorePath = localProperty("controlDroid.keystorePath")
+    ?: providers.gradleProperty("controlDroid.keystorePath").orNull
+    ?: providers.environmentVariable("CONTROL_DROID_KEYSTORE_PATH").orNull
+    ?: "/Users/morieshutapea/AndroidStudioProjects/control-droid/control-droid.jks"
+val signingStorePassword = localProperty("controlDroid.storePassword")
+    ?: providers.gradleProperty("controlDroid.storePassword").orNull
+    ?: providers.environmentVariable("CONTROL_DROID_STORE_PASSWORD").orNull
+val signingKeyAlias = localProperty("controlDroid.keyAlias")
+    ?: providers.gradleProperty("controlDroid.keyAlias").orNull
+    ?: providers.environmentVariable("CONTROL_DROID_KEY_ALIAS").orNull
+val signingKeyPassword = localProperty("controlDroid.keyPassword")
+    ?: providers.gradleProperty("controlDroid.keyPassword").orNull
+    ?: providers.environmentVariable("CONTROL_DROID_KEY_PASSWORD").orNull
 
 android {
     namespace = "com.mories.control_droid"
@@ -19,8 +41,18 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file(signingKeystorePath)
+            storePassword = signingStorePassword
+            keyAlias = signingKeyAlias
+            keyPassword = signingKeyPassword
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -37,6 +69,20 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+}
+
+@Suppress("DEPRECATION")
+android.applicationVariants.all {
+    if (buildType.name == "release") {
+        val releaseVersionName = (versionName ?: "unknown")
+            .replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val releaseVersionCode = versionCode
+
+        outputs.all {
+            (this as com.android.build.gradle.api.ApkVariantOutput).outputFileName =
+                "control-droid-$releaseVersionName-$releaseVersionCode.apk"
+        }
     }
 }
 
