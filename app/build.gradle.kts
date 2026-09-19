@@ -41,23 +41,21 @@ android {
 }
 
 dependencies {
+    implementation(project(":core"))
+    implementation(project(":ui-components"))
+
     // Core & Compose
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
+    implementation(libs.androidx.foundation)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.navigation.compose)
-
-    // Networking
-    implementation(libs.okhttp) // OkHttp WebSocket client
-    implementation(libs.gson)   // JSON parser
-
-    // WebSocket Server (HP target)
-    implementation(libs.nanohttpd.ws)
+    implementation(libs.zxing.android.embedded)
 
     // Testing
     testImplementation(libs.junit)

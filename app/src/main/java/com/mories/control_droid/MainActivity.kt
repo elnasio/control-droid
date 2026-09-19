@@ -26,9 +26,13 @@ import com.mories.control_droid.core.auth.RoleManager
 import com.mories.control_droid.core.model.DeviceRole.CONTROLLER
 import com.mories.control_droid.core.model.DeviceRole.TARGET
 import com.mories.control_droid.core.storage.PairedDeviceStore
+import com.mories.control_droid.core.storage.MacroStore
+import com.mories.control_droid.core.control.MacroRunner
+import com.mories.control_droid.core.model.DeviceAction
 import com.mories.control_droid.features.controller.AddDeviceScreen
 import com.mories.control_droid.features.controller.DeviceControlScreen
 import com.mories.control_droid.features.controller.RemotePreviewScreen
+import com.mories.control_droid.features.controller.MacroScreen
 import com.mories.control_droid.features.target.TargetWaitingScreen
 import com.mories.control_droid.ui.NavigationTarget
 import com.mories.control_droid.ui.screen.HomeScreen
@@ -46,6 +50,7 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
                 val roleManager = remember { RoleManager(context) }
                 val store = remember { PairedDeviceStore(context) }
+                val macroStore = remember { MacroStore(context) }
 
                 val initialRoleManager = RoleManager(applicationContext)
                 val startDestination = if (initialRoleManager.hasRole()) {
@@ -86,7 +91,30 @@ class MainActivity : ComponentActivity() {
                                 navController.navigate(NavigationTarget.Control.withArg(selected.id))
                             }, onAddClick = {
                                 navController.navigate(NavigationTarget.Pair.route)
+                            }, onMacrosClick = {
+                                navController.navigate(NavigationTarget.Macros.route)
+                            }, onBroadcastHome = {
+                                MacroRunner.broadcastAction(DeviceAction.GLOBAL_HOME, homeDevices)
                             })
+                        }
+
+                        composable(NavigationTarget.Macros.route) {
+                            var macros by remember { mutableStateOf(macroStore.getAll()) }
+                            MacroScreen(
+                                macros = macros,
+                                onSave = { macro ->
+                                    macroStore.save(macro)
+                                    macros = macroStore.getAll()
+                                },
+                                onDelete = { macro ->
+                                    macroStore.delete(macro.id)
+                                    macros = macroStore.getAll()
+                                },
+                                onRunOnAll = { macro ->
+                                    MacroRunner.runOnDevices(macro, store.getAll())
+                                },
+                                onBackClick = { navController.popBackStack() }
+                            )
                         }
 
                         composable(NavigationTarget.Pair.route) {
@@ -98,7 +126,9 @@ class MainActivity : ComponentActivity() {
                                     ) {
                                         popUpTo(NavigationTarget.Home.route)
                                     }
-                                })
+                                },
+                                onBackClick = { navController.popBackStack() }
+                            )
                         }
                         composable(
                             route = NavigationTarget.Control.withParam("id"),

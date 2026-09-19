@@ -6,14 +6,21 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
-import com.mories.control_droid.core.control.ScreenCaptureManager
+import androidx.core.content.ContextCompat
 
 class ScreenPermissionActivity : ComponentActivity() {
 
     private val captureLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == RESULT_OK && result.data != null) {
-                ScreenCaptureManager.setProjection(applicationContext, result.resultCode, result.data!!)
+                val serviceIntent = android.content.Intent(
+                    this,
+                    ScreenCaptureService::class.java
+                ).apply {
+                    putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, result.resultCode)
+                    putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, result.data)
+                }
+                ContextCompat.startForegroundService(this, serviceIntent)
                 Log.d("ScreenPermission", "✅ Projection granted")
             } else {
                 Log.e("ScreenPermission", "❌ Projection denied or cancelled")

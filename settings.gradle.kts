@@ -21,3 +21,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "control-droid"
 include(":app")
+include(":core")
+include(":ui-components")

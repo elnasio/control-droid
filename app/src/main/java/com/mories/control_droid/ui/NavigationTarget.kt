@@ -1,7 +1,7 @@
 package com.mories.control_droid.ui
 
 enum class NavigationTarget {
-    RoleSelection, Home, Pair, Control, Preview;
+    RoleSelection, Home, Pair, Control, Preview, Macros;
 
     /** Rute dasar, otomatis dari nama enum (lowercase) */
     val route: String

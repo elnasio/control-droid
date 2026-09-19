@@ -13,9 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
+import com.mories.control_droid.core.networking.DeviceHttpClient
 
 class RemotePreviewViewModel : ViewModel() {
 
@@ -23,51 +21,42 @@ class RemotePreviewViewModel : ViewModel() {
     val uiState: StateFlow<RemotePreviewUiState> = _uiState
 
     private var pollingJob: Job? = null
-    private val client = OkHttpClient()
-
     fun onEvent(event: RemotePreviewEvent) {
         when (event) {
-            is RemotePreviewEvent.StartPolling -> startPolling(event.ip, event.pin)
+            is RemotePreviewEvent.StartPolling -> startPolling(event.ip, event.pin, event.accessToken)
             is RemotePreviewEvent.StopPolling -> stopPolling()
         }
     }
 
-    private fun startPolling(ip: String, pin: String) {
+    private fun startPolling(ip: String, pin: String, accessToken: String) {
         stopPolling()
 
         pollingJob = viewModelScope.launch {
             val url = "http://$ip:${ConstantValue.PORT_VALUE}/screenshot"
             Log.d("RemotePreviewViewModel", "Polling from $url")
+            val client = DeviceHttpClient(ip, pin = pin, accessToken = accessToken)
 
             while (isActive) {
                 try {
-                    val bitmap = withContext(Dispatchers.IO) {
-                        val request = Request.Builder()
-                            .url(url)
-                            .addHeader("X-Control-Pin", pin)
-                            .build()
-                        client.newCall(request).execute().use { response ->
-                            if (!response.isSuccessful) {
-                                _uiState.update {
-                                    it.copy(isLoading = false, error = "HTTP error: ${response.code}")
-                                }
-                                return@use null
-                            }
-                            val decoded = response.body?.bytes()?.let { bytes ->
-                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                            }
-                            if (decoded == null) {
-                                _uiState.update {
-                                    it.copy(isLoading = false, error = "Failed to decode image")
-                                }
-                            }
-                            decoded
+                    val response = client.fetchScreenshot()
+                    if (response.statusCode !in 200..299) {
+                        _uiState.update {
+                            it.copy(isLoading = false, error = "HTTP error: ${response.statusCode}")
                         }
+                        delay(2000)
+                        continue
                     }
 
-                    bitmap?.let { bmp ->
+                    val bitmap = response.bytes?.let { bytes ->
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    }
+                    if (bitmap == null) {
+                        _uiState.update {
+                            it.copy(isLoading = false, error = "Failed to decode image")
+                        }
+                    } else {
                         _uiState.update { state ->
-                            state.copy(isLoading = false, bitmap = bmp, error = null)
+                            state.copy(isLoading = false, bitmap = bitmap, error = null)
                         }
                     }
 
