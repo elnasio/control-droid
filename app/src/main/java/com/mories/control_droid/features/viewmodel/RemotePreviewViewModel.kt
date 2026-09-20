@@ -4,8 +4,7 @@ import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mories.control_droid.core.ConstantValue
-import kotlinx.coroutines.Dispatchers
+import com.mories.control_droid.core.networking.DeviceControlClient
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,7 +12,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import com.mories.control_droid.core.networking.DeviceHttpClient
 
 class RemotePreviewViewModel : ViewModel() {
 
@@ -23,19 +21,16 @@ class RemotePreviewViewModel : ViewModel() {
     private var pollingJob: Job? = null
     fun onEvent(event: RemotePreviewEvent) {
         when (event) {
-            is RemotePreviewEvent.StartPolling -> startPolling(event.ip, event.pin, event.accessToken)
+            is RemotePreviewEvent.StartPolling -> startPolling(event.client)
             is RemotePreviewEvent.StopPolling -> stopPolling()
         }
     }
 
-    private fun startPolling(ip: String, pin: String, accessToken: String) {
+    private fun startPolling(client: DeviceControlClient) {
         stopPolling()
+        _uiState.update { RemotePreviewUiState() }
 
         pollingJob = viewModelScope.launch {
-            val url = "http://$ip:${ConstantValue.PORT_VALUE}/screenshot"
-            Log.d("RemotePreviewViewModel", "Polling from $url")
-            val client = DeviceHttpClient(ip, pin = pin, accessToken = accessToken)
-
             while (isActive) {
                 try {
                     val response = client.fetchScreenshot()

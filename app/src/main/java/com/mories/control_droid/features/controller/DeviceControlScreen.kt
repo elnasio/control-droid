@@ -43,14 +43,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.mories.control_droid.core.model.ControlTransportMode
 import com.mories.control_droid.core.model.DeviceAction
 import com.mories.control_droid.core.model.GestureRequest
 import com.mories.control_droid.core.model.GestureType
 import com.mories.control_droid.core.model.PairedDevice
+import com.mories.control_droid.core.networking.DeviceControlClient
 import com.mories.control_droid.core.networking.DeviceHttpClient
+import com.mories.control_droid.core.networking.InternetRelayClient
 import com.mories.control_droid.features.viewmodel.RemotePreviewEvent
 import com.mories.control_droid.features.viewmodel.RemotePreviewViewModel
 import com.mories.control_droid.ui.components.AppToolbar
+import com.mories.control_droid.ui.components.ConnectionIndicatorState
+import com.mories.control_droid.ui.components.ConnectionStatusIcon
 import com.mories.control_droid.ui.components.ControlActionButton
 import com.mories.control_droid.ui.components.ControlPad
 import com.mories.control_droid.ui.components.ControlPadDirection
@@ -65,9 +70,15 @@ fun DeviceControlScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val client = remember {
+    val wifiClient = remember {
         DeviceHttpClient(device.ip, pin = device.pin, accessToken = device.accessToken.orEmpty())
     }
+    val internetClient = remember {
+        InternetRelayClient(deviceId = device.id, pin = device.pin, accessToken = device.accessToken.orEmpty())
+    }
+    var transportMode by remember { mutableStateOf(ControlTransportMode.WIFI) }
+    val activeClient: DeviceControlClient =
+        if (transportMode == ControlTransportMode.INTERNET) internetClient else wifiClient
     var connected by remember { mutableStateOf(false) }
     var clipboardText by remember { mutableStateOf("") }
     var clipboardStatus by remember { mutableStateOf<String?>(null) }
@@ -76,9 +87,14 @@ fun DeviceControlScreen(
     val clipboardManager = LocalClipboardManager.current
     val previewViewModel: RemotePreviewViewModel = viewModel()
     val previewState by previewViewModel.uiState.collectAsState()
+    val connectionIndicatorState = when {
+        !connected -> ConnectionIndicatorState.DISCONNECTED
+        transportMode == ControlTransportMode.INTERNET -> ConnectionIndicatorState.INTERNET
+        else -> ConnectionIndicatorState.WIFI
+    }
 
     fun sendNavAction(action: DeviceAction) {
-        client.sendAction(action) { success ->
+        activeClient.sendAction(action) { success ->
             val message = if (success) {
                 "${action.label} terkirim"
             } else {
@@ -92,16 +108,15 @@ fun DeviceControlScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        client.checkStatus { reachableAndAuthorized -> connected = reachableAndAuthorized }
+    LaunchedEffect(transportMode) {
+        connected = false
+        activeClient.checkStatus { reachableAndAuthorized -> connected = reachableAndAuthorized }
     }
 
-    LaunchedEffect(showLivePreview) {
+    LaunchedEffect(showLivePreview, transportMode) {
         if (showLivePreview) {
-            client.sendAction(DeviceAction.CAPTURE_SCREEN)
-            previewViewModel.onEvent(
-                RemotePreviewEvent.StartPolling(device.ip, device.pin, device.accessToken.orEmpty())
-            )
+            activeClient.sendAction(DeviceAction.CAPTURE_SCREEN)
+            previewViewModel.onEvent(RemotePreviewEvent.StartPolling(activeClient))
         } else {
             previewViewModel.onEvent(RemotePreviewEvent.StopPolling)
         }
@@ -116,7 +131,13 @@ fun DeviceControlScreen(
         topBar = {
             AppToolbar(
                 title = "Kontrol: ${device.name}",
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                actions = {
+                    ConnectionStatusIcon(
+                        state = connectionIndicatorState,
+                        modifier = Modifier.padding(end = 12.dp)
+                    )
+                }
             )
         },
         bottomBar = {
@@ -165,10 +186,38 @@ fun DeviceControlScreen(
                         text = "Kirim perintah ke ${device.name}.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    StatusBadge(
-                        label = if (connected) "Terhubung" else "Tidak terhubung",
-                        active = connected
-                    )
+                }
+            }
+            item {
+                ElevatedCard {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Kontrol via Internet", style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    text = if (transportMode == ControlTransportMode.INTERNET) {
+                                        "Perintah dikirim lewat relay internet (backend belum aktif — siap disambungkan)."
+                                    } else {
+                                        "Perintah dikirim langsung lewat Wi-Fi lokal, seperti biasa."
+                                    },
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = transportMode == ControlTransportMode.INTERNET,
+                                onCheckedChange = {
+                                    transportMode = if (it) {
+                                        ControlTransportMode.INTERNET
+                                    } else {
+                                        ControlTransportMode.WIFI
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
             }
             item {
@@ -198,7 +247,7 @@ fun DeviceControlScreen(
                                     .padding(top = 4.dp),
                                 enabled = connected,
                                 onDirectionClick = { direction ->
-                                    client.sendGesture(direction.toGestureRequest())
+                                    activeClient.sendGesture(direction.toGestureRequest())
                                 }
                             )
                         }
@@ -257,7 +306,7 @@ fun DeviceControlScreen(
                                             image = previewState.bitmap!!.asImageBitmap(),
                                             modifier = Modifier.fillMaxSize(),
                                             onTap = { x, y ->
-                                                client.sendGesture(
+                                                activeClient.sendGesture(
                                                     GestureRequest(
                                                         type = GestureType.TAP,
                                                         startX = x,
@@ -267,7 +316,7 @@ fun DeviceControlScreen(
                                                 )
                                             },
                                             onSwipe = { startX, startY, endX, endY ->
-                                                client.sendGesture(
+                                                activeClient.sendGesture(
                                                     GestureRequest(
                                                         type = GestureType.SWIPE,
                                                         startX = startX,
@@ -342,7 +391,7 @@ fun DeviceControlScreen(
                         )
                         Button(
                             onClick = {
-                                client.sendClipboard(
+                                activeClient.sendClipboard(
                                     com.mories.control_droid.core.model.ClipboardRequest(clipboardText)
                                 ) { success -> clipboardStatus = if (success) "Teks tersalin ke Target" else "Gagal mengirim teks" }
                             },
@@ -351,7 +400,7 @@ fun DeviceControlScreen(
                         ) { Text("Kirim clipboard") }
                         Button(
                             onClick = {
-                                client.sendClipboard(
+                                activeClient.sendClipboard(
                                     com.mories.control_droid.core.model.ClipboardRequest(clipboardText, paste = true)
                                 ) { success -> clipboardStatus = if (success) "Teks dikirim dan ditempel" else "Gagal menempelkan teks" }
                             },

@@ -115,25 +115,50 @@ Discovery hanya menemukan device dalam asumsi subnet `/24`; router, VPN, guest i
 
 ### Control
 
-`DeviceControlScreen` membuat `DeviceHttpClient` dari IP, port default 8080, PIN, dan access token. Status "Terhubung" berasal dari `GET /status` (`DeviceHttpClient.checkStatus`) — endpoint ringan yang memvalidasi Token/PIN tanpa memicu approval — bukan dari `/ping`, supaya status tidak pernah salah melaporkan "Terhubung" saat kredensial sebenarnya sudah tidak valid. Semua aksi dikirim asynchronous:
+`DeviceControlScreen` tidak lagi bicara langsung ke satu client konkret — ia bergantung pada
+`core/networking/DeviceControlClient`, sebuah interface transport-agnostic (`checkStatus`,
+`sendAction`, `sendGesture`, `sendClipboard`, `fetchScreenshot`). Screen ini membuat **dua**
+instance sekaligus, `DeviceHttpClient` (Wi-Fi lokal, dari IP/port/PIN/access token) dan
+`InternetRelayClient` (relay internet, dari `PairedDevice.id`/PIN/access token — lihat
+`docs/internet-relay-api.md`), lalu memilih salah satunya sebagai `activeClient` berdasarkan
+toggle "Kontrol via Internet" (`core/model/ControlTransportMode`). Semua pemanggilan di bawah ini
+selalu lewat `activeClient`, jadi berpindah Wi-Fi↔Internet tidak mengubah kode pemanggilnya sama
+sekali:
 
-- Back, Home, Recent → `POST /action`, dengan feedback hasil kirim ditampilkan sebagai Toast.
-- Live preview → `POST /action` `capture_screen`, lalu navigasi ke preview.
-- Clipboard → `POST /clipboard`.
-- Clipboard + paste → `POST /clipboard` dengan `paste=true`.
+- Back, Home, Recent → `sendAction` (di Wi-Fi: `POST /action` raw text; di relay: `POST /action`
+  JSON `{"command": ...}`), dengan feedback hasil kirim ditampilkan sebagai Toast. Ketiga tombol
+  ini dipindah ke `bottomBar` Scaffold (sticky), bukan bagian dari `LazyColumn` yang scroll.
+- Live preview → toggle Switch inline (bukan navigasi ke screen terpisah): saat dinyalakan,
+  mengirim `sendAction(CAPTURE_SCREEN)` lalu memulai `RemotePreviewViewModel` polling; gambar,
+  status, dan gesture tap/swipe dirender langsung di kartu yang sama.
+- Clipboard → `sendClipboard`; field teksnya punya ikon tempel (ambil teks dari clipboard sistem
+  Controller sendiri, lewat `LocalClipboardManager`) dan ikon X (kosongkan field), terpisah dari
+  tombol "Kirim clipboard"/"Kirim dan tempel" yang benar-benar mengirim ke Target.
 
-Tombol Back/Home/Recent dan Control pad hanya aktif jika `checkStatus` awal berhasil. Arah atas/bawah/kiri/kanan Control pad dipetakan menjadi `GestureRequest` swipe normalized dari area tengah layar Target, lalu dikirim melalui endpoint `/gesture` yang sudah ada.
+Status "Terhubung" berasal dari `checkStatus` milik `activeClient` (di Wi-Fi: `GET /status`; di
+relay: `GET /v1/devices/{id}/status`) — endpoint ringan yang memvalidasi kredensial tanpa memicu
+approval, bukan dari `/ping`, supaya status tidak pernah salah melaporkan "Terhubung" saat
+kredensial sebenarnya sudah tidak valid. `checkStatus` dijalankan ulang setiap kali toggle
+transport berubah. Toolbar menampilkan `ConnectionStatusIcon` (`ui-components`): hijau (Wi-Fi
+terhubung), kuning (Internet terhubung), merah (tidak terhubung pada mode manapun) — turunan
+murni dari `connected` dan `transportMode`, tidak ada state independen ketiga.
+
+Tombol Back/Home/Recent dan Control pad hanya aktif jika `checkStatus` awal berhasil. Arah atas/bawah/kiri/kanan Control pad dipetakan menjadi `GestureRequest` swipe normalized dari area tengah layar Target, lalu dikirim melalui `activeClient.sendGesture`.
 
 ### Remote preview
 
-`RemotePreviewViewModel` memulai polling ketika screen masuk composition dan membatalkan polling ketika screen dilepas. Polling:
+`RemotePreviewViewModel` transport-agnostic: `RemotePreviewEvent.StartPolling` membawa
+`DeviceControlClient` yang sedang aktif (bukan lagi IP/PIN/token mentah), sehingga polling
+otomatis mengikuti transport Wi-Fi/Internet yang dipilih di `DeviceControlScreen`. Polling dimulai
+saat toggle live-preview dan/atau `transportMode` berubah, dan dibatalkan saat toggle dimatikan
+atau screen dilepas:
 
-1. `GET /screenshot`.
+1. `client.fetchScreenshot()`.
 2. Decode response bytes menjadi Bitmap.
 3. Update `RemotePreviewUiState`.
 4. Delay 2 detik.
 
-Gesture pada `RemotePreviewSurface` dikonversi menjadi koordinat `0..1` berdasarkan ukuran composable dan dikirim sebagai `GestureRequest`.
+Gesture pada `RemotePreviewSurface` dikonversi menjadi koordinat `0..1` berdasarkan ukuran composable dan dikirim sebagai `GestureRequest` lewat `activeClient`.
 
 ## 5. Target flow
 
@@ -184,7 +209,7 @@ Jika permission dicabut atau service berhenti, preview tidak mendapatkan frame b
 | `ControllerIdentityStore` (Controller) | `controller_identity` | `controller_id` | UUID persisten instalasi Controller |
 | `TrustedControllerStore` (Target) | `trusted_controllers` | `controllers` | JSON list `TrustedController` yang sudah disetujui |
 
-Data pairing dan macro bersifat lokal per installation. Tidak ada sinkronisasi antar device atau backup cloud yang dikelola aplikasi.
+Data pairing dan macro bersifat lokal per installation. Tidak ada sinkronisasi antar device atau backup cloud yang dikelola aplikasi. `android:allowBackup="false"` di `AndroidManifest.xml` juga menonaktifkan Android Auto Backup/`adb backup` bawaan OS untuk seluruh data app ini — PIN, access token, dan daftar trusted controller di atas tidak boleh ikut ter-backup/dipulihkan ke device lain di luar kendali app.
 
 ## 7. Window inset dan UI architecture
 

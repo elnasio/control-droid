@@ -55,20 +55,20 @@ All navigation is a single `NavHost` in `MainActivity.kt` using routes defined i
 
 - `features/controller/AddDeviceScreen` supports QR pairing with a Target access token and retains the subnet scanner as a fallback. The scanner derives the local `/24` subnet from the device's own IP and fans out concurrent `GET /ping` requests (300ms timeout each) across all 254 hosts to find devices responding `"ControlDroid"`.
 - Paired devices are persisted locally via `core/storage/PairedDeviceStore` (Gson-serialized `List<PairedDevice>` in SharedPreferences `paired_devices`) — pairing state is per-Controller-device, not synced. `MainActivity`'s Home route re-reads the store on every entry (not just once), so newly paired devices show up immediately after returning from pairing.
-- `features/controller/DeviceControlScreen` sends `DeviceAction`s, clipboard requests, and starts remote preview through `core/networking/DeviceHttpClient`. `RemotePreviewScreen` polls `GET /screenshot` and also sends tap/swipe gestures. There is no WebSocket path in this app; `TargetHttpServer` never implements `/ws`, so the client doesn't attempt one.
-- `features/controller/RemotePreviewScreen` (backed by `features/viewmodel/RemotePreviewViewModel`, `RemotePreviewUiState`, `RemotePreviewEvent`) polls `GET /screenshot` from the Target with the paired token and/or PIN, and sends normalized tap/swipe gestures over the same local HTTP connection.
+- `features/controller/DeviceControlScreen` depends on `core/networking/DeviceControlClient`, a transport-agnostic interface implemented by both `DeviceHttpClient` (local Wi-Fi) and `InternetRelayClient` (cloud relay, not built server-side yet — see `docs/internet-relay-api.md`); a "Kontrol via Internet" `Switch` picks which one is `activeClient` for every action, gesture, clipboard, and live-preview call. A toolbar `ConnectionStatusIcon` shows green (Wi-Fi connected), yellow (Internet connected), or red (disconnected). There is no WebSocket path in this app; `TargetHttpServer` never implements `/ws`.
+- Live preview is an inline `Switch` toggle inside `DeviceControlScreen` (not a separate screen) backed by `features/viewmodel/RemotePreviewViewModel` (`RemotePreviewUiState`, `RemotePreviewEvent`), which is itself transport-agnostic — `RemotePreviewEvent.StartPolling` carries whichever `DeviceControlClient` is currently active and polls `fetchScreenshot()` on it, then sends normalized tap/swipe gestures back through the same client.
 - `features/controller/MacroScreen` and `core/storage/MacroStore` manage navigation-only macros. `core/control/MacroRunner` executes a macro sequentially across all paired Target devices; Home also exposes a direct broadcast Home action.
 
 ### PIN / auth model
 
 PIN/token enforcement is wired end-to-end:
 - **Target**: `TargetWaitingScreen` lets the device owner set/change a PIN via `core/auth/PinVerifier` (`setPin`/`isPinSet`, backed by SharedPreferences `security_prefs`) and displays a QR containing the token from `core/auth/PairingTokenStore`. `TargetHttpServer` requires `X-Control-Token` on `/pair` and accepts either a matching `X-Control-Token` or legacy `X-Control-Pin` on `/action`, `/gesture`, `/clipboard`, and `/screenshot`; unauthorized requests return `401 Unauthorized`. `GET /ping` stays open (needed for discovery, no sensitive data).
-- **Controller**: `AddDeviceScreen` can scan a Target QR code, validates it through `GET /pair`, and stores its access token on `PairedDevice`; the legacy scanner still prompts for a PIN. `DeviceHttpClient` and `RemotePreviewViewModel` attach `X-Control-Token` and/or the legacy `X-Control-Pin` header as available.
+- **Controller**: `AddDeviceScreen` can scan a Target QR code, validates it through `GET /pair`, and stores its access token on `PairedDevice`; the legacy scanner still prompts for a PIN. `DeviceHttpClient` attaches `X-Control-Token` and/or the legacy `X-Control-Pin` header as available; `InternetRelayClient` sends the same credentials as `Authorization: Bearer` and `X-Control-Pin`.
 - Caveat: the token/PIN flow is verified by code review + `assembleDebug`/`test`/`lint` only — it has not been exercised over a real two-device network yet.
 
 ### Networking constants
 
-`core/ConstantValue.PORT_VALUE` (8080) is the single source of truth for the HTTP port, used by both `TargetHttpServer` (Target) and `DeviceScanner`/`DeviceHttpClient`/`RemotePreviewViewModel` (Controller). `res/xml/network_security_config.xml` governs cleartext traffic policy for local HTTP.
+`core/ConstantValue.PORT_VALUE` (8080) is the single source of truth for the HTTP port, used by both `TargetHttpServer` (Target) and `DeviceScanner`/`DeviceHttpClient` (Controller). `core/ConstantValue.INTERNET_RELAY_BASE_URL` is the (placeholder, `.example`) base URL `InternetRelayClient` targets until a real relay backend exists. `res/xml/network_security_config.xml` governs cleartext traffic policy for local HTTP.
 
 ### Feature limitations
 
@@ -87,7 +87,7 @@ PIN/token enforcement is wired end-to-end:
 
 - `org.nanohttpd:nanohttpd-websocket` — embedded HTTP server on the Target (`NanoWSD`'s WebSocket features are not used; only the plain `NanoHTTPD` request handling in `TargetHttpServer`).
 - ZXing Android Embedded — QR pairing scan and QR generation support.
-- OkHttp — HTTP client on the Controller (`DeviceHttpClient`, `RemotePreviewViewModel`).
+- OkHttp — HTTP client on the Controller (`DeviceHttpClient`, `InternetRelayClient`).
 - Gson — used for `PairedDevice` (de)serialization in `PairedDeviceStore`.
 - Jetpack Navigation Compose — single-`NavHost` app navigation.
 - The `com.google.gms.google-services` plugin is applied and `app/google-services.json` is present, but no Firebase library is currently declared in `app/build.gradle.kts` — there's no active Firebase integration yet.
@@ -102,6 +102,7 @@ Before changing behavior, consult the relevant document under `docs/`:
 - `docs/testing.md`: test inventory, evidence levels, and untested runtime boundaries.
 - `docs/troubleshooting.md`: diagnosis flow and log tags.
 - `docs/ui-guidelines.md`: Material 3, reusable components, previews, inset, state, and accessibility rules.
+- `docs/internet-relay-api.md`: client-ready-to-wire contract for controlling a Target over the Internet instead of local Wi-Fi (backend not yet built).
 - `docs/2026-09-19-remote-control-features.md`: chronological delivery notes for the current workday.
 
 When code changes affect behavior, update the relevant documentation in the same workday. Keep protocol documentation and tests synchronized; an endpoint change is incomplete until its request/response documentation and contract test are updated.

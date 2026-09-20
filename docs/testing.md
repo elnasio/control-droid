@@ -20,6 +20,7 @@ Gunakan tiga level bukti:
 | `CoreStateTest` | PIN, pairing token, role, paired device store (termasuk dedup by-IP), macro store, controller identity store, trusted controller store, `PairingApprovalGate` (approve/reject/timeout). |
 | `PairingQrCodeGeneratorTest` | Ukuran bitmap dan adanya pola QR. |
 | `DeviceHttpClientTest` | Command, credential headers, controller-identity headers, `/status` check, gesture JSON, clipboard JSON, screenshot response. |
+| `InternetRelayClientTest` | Same contract as `DeviceHttpClientTest` against `/v1/devices/{id}/...` paths: `Authorization`/PIN headers, JSON action body, gesture/clipboard JSON, screenshot response, and reporting disconnected on an unreachable relay. See `docs/internet-relay-api.md`. |
 
 Robolectric dipakai untuk Android `Context`, SharedPreferences, dan Bitmap. MockWebServer dipakai untuk request contract tanpa device target.
 
@@ -76,6 +77,8 @@ Belum semua method dan screen memiliki unit test. Area yang masih memerlukan cov
 - `RemotePreviewViewModel` polling lifecycle, retry, HTTP error, dan decode error.
 - `MacroRunner` concurrency, delay, dan partial failure.
 - Semua visual regression/layout pada ukuran layar berbeda.
+- `InternetRelayClient` belum pernah dicoba terhadap backend relay nyata — backend-nya memang belum dibangun (lihat `docs/internet-relay-api.md`); `InternetRelayClientTest` hanya membuktikan kontrak request/response terhadap MockWebServer, bukan integrasi end-to-end.
+- Perpindahan toggle "Kontrol via Internet" dan warna `ConnectionStatusIcon` (hijau/kuning/merah) di `DeviceControlScreen` baru diverifikasi manual, belum ada Compose UI test otomatis.
 
 ## 5. Test contract yang wajib ditambahkan saat perubahan
 

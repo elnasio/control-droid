@@ -35,12 +35,10 @@ class DeviceHttpClient(
     private val accessToken: String = "",
     private val controllerId: String = "",
     private val controllerName: String = "",
-) {
+) : DeviceControlClient {
     private val client = OkHttpClient.Builder().callTimeout(3, TimeUnit.SECONDS).build()
     private val pairingClient = OkHttpClient.Builder().callTimeout(PAIRING_TIMEOUT_SECONDS, TimeUnit.SECONDS).build()
     private val gson = Gson()
-
-    data class ScreenshotResult(val statusCode: Int, val bytes: ByteArray?)
 
     /**
      * Checks whether this client's stored PIN/token would actually authorize a real
@@ -49,7 +47,7 @@ class DeviceHttpClient(
      * genuinely valid, so the Controller UI never shows Terhubung for a device whose PIN/token
      * has since changed or been revoked.
      */
-    fun checkStatus(onResult: (Boolean) -> Unit) {
+    override fun checkStatus(onResult: (Boolean) -> Unit) {
         val request = authorizedRequest("/status").get().build()
         client.newCall(request).enqueue(object : Callback {
             override fun onResponse(call: Call, response: Response) {
@@ -67,7 +65,7 @@ class DeviceHttpClient(
         sendAction(action) { }
     }
 
-    fun sendAction(action: DeviceAction, onResult: (Boolean) -> Unit) {
+    override fun sendAction(action: DeviceAction, onResult: (Boolean) -> Unit) {
         val requestBody = action.command.toRequestBody("text/plain".toMediaTypeOrNull())
         val request = authorizedRequest("/action")
             .post(requestBody)
@@ -132,15 +130,15 @@ class DeviceHttpClient(
         })
     }
 
-    fun sendGesture(gesture: GestureRequest, onResult: (Boolean) -> Unit = {}) {
+    override fun sendGesture(gesture: GestureRequest, onResult: (Boolean) -> Unit) {
         sendJson("/gesture", gesture, onResult)
     }
 
-    fun sendClipboard(requestBody: ClipboardRequest, onResult: (Boolean) -> Unit = {}) {
-        sendJson("/clipboard", requestBody, onResult)
+    override fun sendClipboard(request: ClipboardRequest, onResult: (Boolean) -> Unit) {
+        sendJson("/clipboard", request, onResult)
     }
 
-    suspend fun fetchScreenshot(): ScreenshotResult = withContext(Dispatchers.IO) {
+    override suspend fun fetchScreenshot(): ScreenshotResult = withContext(Dispatchers.IO) {
         val request = authorizedRequest("/screenshot").get().build()
         client.newCall(request).execute().use { response ->
             ScreenshotResult(
