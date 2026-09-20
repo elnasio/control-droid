@@ -45,6 +45,19 @@ koneksi persisten ke Target yang bersangkutan, lalu backend menunggu balasan Tar
 menjawab HTTP request Controller yang masih terbuka — pola *request/response over async transport*
 dengan timeout, bukan fire-and-forget.
 
+### 2.1 Asumsi: pairing awal tetap lewat Wi-Fi lokal
+
+Dokumen ini **mengasumsikan** toggle "Kontrol via Internet" hanya muncul untuk device yang sudah
+berhasil dipasangkan lewat alur lokal (QR/`PairingApprovalGate`/PIN legacy — lihat
+`docs/architecture.md` bagian "Pairing approval"), sehingga `PairedDevice.id`, PIN, dan
+`accessToken` sudah ada sebelum mode Internet pernah dipakai. Backend **tidak perlu** mendukung
+pairing awal antara dua device yang belum pernah berada di jaringan yang sama.
+
+Kalau ke depannya dibutuhkan pairing murni lewat internet (dua device yang tidak pernah satu
+Wi-Fi), itu fitur terpisah yang butuh alur approval baru yang setara `PairingApprovalGate` tapi
+dijalankan lewat backend — **belum dirancang di dokumen ini** dan sebaiknya jadi keputusan
+eksplisit sebelum dikerjakan (lihat §8.5).
+
 ## 3. Kontrak yang sudah ditentukan (sisi Controller)
 
 Backend **wajib** melayani persis kontrak di `docs/internet-relay-api.md`:
@@ -127,13 +140,36 @@ ditangani UI sebagai "Tidak terhubung".
 3. **Autentikasi & otorisasi**:
    - Backend memvalidasi `X-Control-Pin`/`Authorization` Controller sama seperti
      `TargetHttpServer.hasValidCredentials()` di lokal (PIN ATAU token, salah satu valid cukup).
+   - **PIN 4-digit tidak boleh diperlakukan sama amannya di internet seperti di Wi-Fi lokal.** Di
+     LAN, batas kepercayaannya adalah "siapa yang bisa mengakses jaringan itu"; di internet, PIN
+     pendek jadi target brute-force dari mana saja. Requirement konkret:
+     - Backend **wajib** menerapkan rate-limit/lockout khusus pada percobaan autentikasi yang
+       gagal per `deviceId` (terpisah dari rate-limit umum di §4), mis. lockout sementara setelah
+       beberapa kali PIN salah berturut-turut.
+     - Direkomendasikan: mode Internet hanya menerima `accessToken` (32-byte, hasil QR pairing)
+       dan **menolak** autentikasi berbasis PIN saja untuk endpoint relay — PIN legacy tetap boleh
+       dipakai di Wi-Fi lokal seperti sekarang, tapi jangan diwarisi begitu saja sebagai kredensial
+       internet-facing. Ini butuh keputusan eksplisit (lihat §8.6) karena mengubah cakupan
+       `docs/internet-relay-api.md` §4.
    - Backend juga perlu tahu Controller mana yang **boleh** mengontrol `deviceId` tersebut — ini
      setara `TrustedControllerStore` yang saat ini hanya hidup lokal di Target
      (lihat `PairingApprovalGate`/approval Terima-Tolak). Backend perlu versi servernya sendiri:
      entah mereplikasi daftar trusted controller dari Target saat online, atau memakai model akun
      terpisah. **Ini keputusan desain yang belum diambil** — lihat §8.
-   - Revocation: kalau user menghapus akses Controller lewat "Hapus akses" di Target (lokal),
-     idealnya efeknya juga berlaku ke sesi relay yang sedang berjalan, bukan hanya lokal.
+   - **Revocation, mekanisme konkret**: kalau user menekan "Hapus akses" di Target (lokal), efeknya
+     harus juga memutus sesi relay yang sedang berjalan untuk Controller tersebut, bukan cuma
+     lokal. Dua pendekatan yang perlu dipilih backend:
+     1. *Push dari Target*: begitu `TrustedControllerStore.revoke()` dipanggil lokal, Target (kalau
+        sedang online ke backend) mengirim pesan lewat koneksi WebSocket yang sama
+        (`{"type": "revoke", "controllerId": "..."}`) supaya backend langsung menolak request
+        Controller itu berikutnya.
+     2. *Re-validasi per request*: backend tidak menyimpan cache "trusted" jangka panjang sama
+        sekali — setiap request diteruskan ke Target untuk divalidasi ulang (Target yang jadi
+        sumber kebenaran final soal siapa yang trusted), sehingga revoke lokal otomatis berlaku
+        tanpa mekanisme sinkronisasi tambahan, dengan trade-off menambah satu round-trip.
+     Pendekatan 2 lebih sederhana dan tidak butuh state trust duplikat di backend; pendekatan 1
+     lebih cepat tapi butuh backend menyimpan cache trust yang bisa basi. Belum diputuskan yang
+     mana — lihat §8.7.
 4. **Rate limiting** — batasi frekuensi request per Controller dan per Target untuk mencegah
    penyalahgunaan (mis. spam `/action` atau `/screenshot`).
 5. **Screenshot relay** — endpoint `/screenshot` mengembalikan PNG mentah, berpotensi ratusan KB
@@ -150,18 +186,40 @@ ditangani UI sebagai "Tidak terhubung".
 - **Keamanan transport**: HTTPS/WSS wajib di semua koneksi (Controller↔backend dan
   Target↔backend); tidak ada cleartext seperti mode Wi-Fi lokal yang memang sengaja mengizinkan
   HTTP untuk jaringan lokal saja (`network_security_config.xml`).
+- **Proteksi replay attack**: request yang di-capture (mis. lewat proxy/MITM di jaringan publik)
+  tidak boleh bisa diputar ulang begitu saja untuk memicu aksi yang sama lagi. Backend perlu salah
+  satu dari: nonce sekali-pakai per request, timestamp dengan jendela toleransi kecil yang ditolak
+  kalau kedaluwarsa, atau memanfaatkan `requestId` (§4.2) sebagai idempotency key sehingga
+  `requestId` yang sama tidak pernah dieksekusi dua kali oleh Target.
 - **Privasi data**: screenshot dan teks clipboard yang lewat backend sangat sensitif. Backend
   **tidak boleh menyimpan/log isi payload ini** — relay murni in-memory/in-transit, tanpa
   persistence, tanpa masuk ke log aplikasi maupun log infrastruktur (mis. access log yang
   mencatat body request).
 - **Kredensial**: PIN/token tidak boleh disimpan plaintext kalau backend perlu menyimpannya sama
   sekali (idealnya backend hanya meneruskan kredensial untuk divalidasi Target, tidak menyimpan
-  salinan permanen).
+  salinan permanen). Lihat juga §5.3 soal PIN sebagai kredensial internet-facing.
+- **Consent dan kepatuhan**: fitur ini merutekan konten layar dan clipboard Target — berpotensi
+  berisi data sangat pribadi (pesan, foto, kredensial yang sedang diketik) — lewat server pihak
+  ketiga yang secara arsitektur *bisa* melihat isinya sekilas saat relay, meskipun diwajibkan
+  tidak menyimpan/log. Ini beda signifikan dari mode Wi-Fi lokal yang murni peer-to-peer tanpa
+  perantara. Sebelum mode Internet dirilis ke pengguna nyata:
+  - User di sisi Target sebaiknya mendapat pemberitahuan eksplisit (terpisah dari dialog approval
+    pairing lokal yang sudah ada) bahwa mengaktifkan mode Internet berarti perintah dan tangkapan
+    layar melewati server pihak ketiga, bukan hanya jaringan lokal.
+  - Kalau backend dioperasikan pihak lain (bukan pemilik app), perlu ada perjanjian/pernyataan
+    privasi yang menyebutkan data apa yang transit lewat backend dan kebijakan no-storage di atas
+    secara mengikat, bukan cuma requirement teknis di dokumen internal ini.
+  - Ini keputusan produk/legal, bukan cuma teknis — dokumen ini hanya menandai bahwa hal itu
+    dibutuhkan, bukan menentukan bentuknya.
 - **Latensi**: perintah navigasi (`/action`, `/gesture`) perlu terasa responsif — targetkan round
   trip Controller→backend→Target→backend→Controller di bawah ~1–2 detik pada kondisi jaringan
   normal, supaya pengalaman kontrol tidak terasa jauh lebih lambat dibanding mode Wi-Fi lokal.
-- **Skalabilitas**: harus menahan banyak koneksi Target persisten bersamaan (satu per Target
-  device yang sedang mode Internet), plus request rate dari Controller-nya masing-masing.
+- **Skalabilitas**: belum ada target angka resmi dari produk ini (aplikasi belum punya basis
+  pengguna nyata untuk mode Internet). Sampai ada angka resmi, backend sebaiknya didesain agar
+  gampang di-scale-out secara horizontal (tidak menyimpan state koneksi WebSocket hanya di memori
+  satu instance tanpa cara reroute), dengan asumsi kerja awal di kisaran puluhan–ratusan koneksi
+  Target bersamaan. **Angka ini eksplisit TBD** — konfirmasi ke pemilik produk sebelum
+  commit ke desain yang sulit diubah (mis. arsitektur single-node).
 - **Reliability**: koneksi Target yang terputus harus terdeteksi dalam waktu wajar (lewat
   heartbeat) supaya `GET /status` tidak melaporkan "online" secara salah untuk device yang
   sebenarnya sudah putus.
@@ -199,6 +257,13 @@ kecil ke app Controller (biasanya cuma ubah `InternetRelayClient`) tapi menentuk
    belum ada di scope `InternetRelayClient` maupun dokumen ini secara detail.
 4. **Kompresi/kualitas screenshot** untuk mode Internet, mengingat bandwidth seluler lebih mahal
    dan tidak stabil dibanding Wi-Fi lokal.
+5. **Pairing murni lewat internet** (§2.1) — apakah ini akan dibutuhkan di masa depan, dan kalau
+   ya, siapa yang merancang alur approval-nya (setara `PairingApprovalGate` tapi lewat backend).
+6. **Kebijakan PIN untuk mode Internet** (§5.3) — apakah PIN legacy tetap diterima untuk relay,
+   atau mode Internet dibatasi hanya menerima `accessToken`. Ini mengubah cakupan
+   `docs/internet-relay-api.md` §4 kalau diputuskan membatasi.
+7. **Mekanisme propagasi revoke** (§5.3) — push dari Target saat online vs re-validasi per
+   request ke Target. Menentukan apakah backend perlu menyimpan cache trust sama sekali.
 
 ## 9. Di luar cakupan (non-goals)
 
@@ -208,7 +273,30 @@ kecil ke app Controller (biasanya cuma ubah `InternetRelayClient`) tapi menentuk
   ada.
 - Dashboard admin/manajemen device — di luar kebutuhan fungsional app saat ini.
 
-## 10. Referensi
+## 10. Checklist penerimaan backend
+
+Sebelum backend dianggap siap dipakai app Controller yang sudah ada (tanpa mengubah
+`InternetRelayClient`), pastikan:
+
+- [ ] Semua endpoint di §3 melayani persis path, method, dan status code sesuai
+      `docs/internet-relay-api.md`.
+- [ ] `GET /status` mengembalikan `200` hanya kalau backend benar-benar punya koneksi hidup ke
+      Target itu (bukan cuma "device pernah dikenal") — lihat §6 poin Reliability.
+- [ ] Request ke `deviceId` yang Target-nya sedang offline mengembalikan `502`/`503` dalam batas
+      timeout §4.4, bukan menggantung tanpa batas waktu.
+- [ ] Kredensial salah (PIN/token) mengembalikan `401` pada seluruh endpoint, bukan hanya
+      `/status`.
+- [ ] Rate-limit percobaan autentikasi gagal (§5.3) aktif dan teruji — beberapa kali PIN salah
+      berturut-turut memicu lockout sementara.
+- [ ] Revoke Controller di Target (lokal) terbukti memutus akses relay Controller itu dalam waktu
+      wajar (bergantung mekanisme yang dipilih di §8.7).
+- [ ] Tidak ada payload `/gesture`, `/clipboard`, atau `/screenshot` yang muncul di log aplikasi
+      maupun access log infrastruktur (audit manual sebelum go-live).
+- [ ] Reconnect Target (matikan-nyalakan jaringan) pulih otomatis tanpa duplikasi sesi untuk
+      `deviceId` yang sama.
+- [ ] Metrics dasar (online device count, latency, error rate) tersedia di dashboard operasional.
+
+## 11. Referensi
 
 - `docs/internet-relay-api.md` — kontrak HTTP Controller↔backend yang sudah diimplementasikan dan
   wajib dipatuhi backend.
