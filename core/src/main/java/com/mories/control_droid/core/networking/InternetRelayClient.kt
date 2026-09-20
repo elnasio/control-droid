@@ -19,7 +19,6 @@ import okhttp3.Response
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-private const val PIN_HEADER = "X-Control-Pin"
 private const val AUTH_HEADER = "Authorization"
 private const val TAG = "InternetRelayClient"
 
@@ -39,11 +38,16 @@ private const val RELAY_TIMEOUT_SECONDS = 8L
  * The contract assumes the (not-yet-built) pairing backend will key relay sessions by that same
  * id; if a future backend issues its own separate routing id instead, only this class's
  * [authorizedRequest] needs to change.
+ *
+ * Unlike [DeviceHttpClient], this class only accepts [accessToken] — the legacy 4-digit PIN is
+ * not sent to the relay at all. A short PIN is an acceptable credential inside a trusted local
+ * network, but not against an internet-facing endpoint reachable from anywhere; see
+ * docs/backend-requirements.md §1.1. A device paired through the legacy PIN-only flow (no QR, so
+ * [accessToken] is blank) therefore cannot use Internet mode until it's re-paired via QR.
  */
 class InternetRelayClient(
     private val deviceId: String,
-    private val pin: String,
-    private val accessToken: String = "",
+    private val accessToken: String,
     private val baseUrl: String = ConstantValue.INTERNET_RELAY_BASE_URL,
 ) : DeviceControlClient {
 
@@ -104,7 +108,6 @@ class InternetRelayClient(
     private fun authorizedRequest(path: String): Request.Builder {
         val builder = Request.Builder().url("$baseUrl/v1/devices/$deviceId$path")
         if (accessToken.isNotBlank()) builder.addHeader(AUTH_HEADER, "Bearer $accessToken")
-        if (pin.isNotBlank()) builder.addHeader(PIN_HEADER, pin)
         return builder
     }
 

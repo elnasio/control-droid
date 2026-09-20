@@ -64,7 +64,7 @@ Build release setelah seluruh nilai tersedia:
 ./gradlew :app:assembleRelease
 ```
 
-Nama output release mengikuti format `control-droid-<versionName>-<versionCode>.apk`, contohnya `control-droid-1.1.0-7.apk`, di bawah `app/build/outputs/apk/release/`.
+Nama output release mengikuti format `control-droid-<versionName>-<versionCode>.apk`, contohnya `control-droid-1.2.0-8.apk`, di bawah `app/build/outputs/apk/release/`.
 
 Build release mengaktifkan R8 melalui `isMinifyEnabled = true` dan resource shrinking melalui `isShrinkResources = true`. Hasil mapping obfuscation berada di `app/build/outputs/mapping/release/mapping.txt`; simpan file ini untuk kebutuhan crash deobfuscation dan jangan commit ke repository.
 

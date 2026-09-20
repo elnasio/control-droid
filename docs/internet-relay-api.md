@@ -17,6 +17,12 @@ merah.
 Untuk requirement backend yang lebih lengkap (arsitektur koneksi Target↔backend, model data,
 keamanan, dsb — bukan cuma kontrak HTTP sisi Controller ini), lihat `docs/backend-requirements.md`.
 
+**Catatan**: dokumen ini menjelaskan kontrak yang **saat ini sudah diimplementasikan**
+`InternetRelayClient` apa adanya, termasuk kebijakan kredensial di §4 yang sudah final
+(token-only — lihat `docs/backend-requirements.md` §1.1). Bagian lain di luar kredensial (mis.
+routing key device, model akun) masih bisa berubah — lihat keputusan terbuka yang tersisa di
+`docs/backend-requirements.md` §8.
+
 ## 2. Kenapa bentuknya begini
 
 Kontrak Wi-Fi lokal (`docs/http-api.md`) mengalamatkan Target langsung lewat IP, yang hanya
@@ -31,6 +37,11 @@ Kunci routing: path memakai `PairedDevice.id` (UUID lokal yang sama yang sudah d
 nanti menerbitkan routing id terpisah, cukup ubah `InternetRelayClient.authorizedRequest`; bagian
 app lain tidak terpengaruh karena semua pemanggil hanya melihat interface `DeviceControlClient`.
 
+Kontrak ini juga mengasumsikan `PairedDevice` (berikut `accessToken`-nya, lihat §4) sudah ada dari
+pairing lokal lewat Wi-Fi sebelum toggle "Kontrol via Internet" pernah dipakai — lihat
+`docs/backend-requirements.md` §2.1. Kontrak di sini tidak mencakup skenario pairing yang murni
+terjadi lewat internet.
+
 ## 3. Base URL dan versioning
 
 ```
@@ -44,16 +55,22 @@ suntikkan `baseUrl` lain — begitu relay nyata sudah di-deploy.
 
 ## 4. Header autentikasi
 
-Dikirim di setiap request, mencerminkan kredensial pada kontrak lokal:
+Dikirim di setiap request:
 
 | Header | Nilai | Catatan |
 |---|---|---|
-| `Authorization` | `Bearer {accessToken}` | Hanya dikirim kalau `PairedDevice.accessToken` tidak kosong. |
-| `X-Control-Pin` | PIN legacy device yang dipasangkan | Hanya dikirim kalau tidak kosong; peran fallback sama seperti pada API lokal. |
+| `Authorization` | `Bearer {accessToken}` | Satu-satunya kredensial yang diterima relay. Hanya dikirim kalau `PairedDevice.accessToken` tidak kosong. |
 
-Backend nyata sebaiknya menerima salah satu dari dua kredensial ini persis seperti
-`TargetHttpServer.hasValidCredentials()` di sisi lokal, supaya device yang sudah dipasangkan lewat
-Wi-Fi tetap berfungsi kalau user mengaktifkan mode Internet tanpa perlu pairing ulang.
+**Beda dari kontrak lokal, disengaja**: `InternetRelayClient` **tidak pernah** mengirim
+`X-Control-Pin` ke relay, walaupun `TargetHttpServer.hasValidCredentials()` di Wi-Fi lokal
+menerima PIN ATAU token. PIN 4-digit yang cukup aman di dalam batas kepercayaan jaringan lokal
+jadi rawan brute-force sebagai kredensial internet-facing — lihat alasan lengkap di
+`docs/backend-requirements.md` §1.1. Backend **wajib** menolak (`401`) request relay yang tidak
+membawa `Authorization` valid, meski PIN turut dikirim.
+
+Konsekuensi: device yang dipasangkan lewat alur PIN legacy saja (`accessToken` kosong, tidak
+pernah scan QR) tidak bisa memakai mode Internet. `DeviceControlScreen` menonaktifkan toggle
+"Kontrol via Internet" untuk kasus ini dan menjelaskan ke user bahwa perlu pairing ulang lewat QR.
 
 ## 5. Endpoint
 
@@ -127,9 +144,14 @@ preview berjalan di transport manapun tanpa perubahan begitu polling di-(re)star
   pairing.
 - Rate limiting, terminasi TLS, dan model akun/kepemilikan untuk menentukan Controller mana yang
   boleh menjangkau Target mana.
+- Proteksi replay attack (nonce/timestamp/idempotency key) — belum ada di kontrak ini, jadi
+  murni tanggung jawab backend, bukan sesuatu yang perlu dikirim Controller hari ini.
+- Mekanisme supaya "Hapus akses" Controller di Target (lokal) benar-benar memutus sesi relay yang
+  sedang berjalan, bukan cuma lokal.
+- Pemberitahuan/consent eksplisit ke user Target bahwa mode Internet merutekan layar dan clipboard
+  lewat server pihak ketiga — ini keputusan produk, bukan bagian dari kontrak HTTP ini.
 
-Lihat `docs/backend-requirements.md` untuk requirement backend secara menyeluruh, termasuk
-protokol sisi Target (yang juga belum diimplementasikan) dan aspek non-fungsional (keamanan,
-skalabilitas, observability). Tidak ada satupun dari ini yang diimplementasikan di sisi client
-selain kontrak di atas; `InternetRelayClient` adalah HTTP client tipis terhadap kontrak ini,
-strukturnya identik dengan `DeviceHttpClient`.
+Detail masing-masing poin, plus checklist penerimaan backend dan protokol sisi Target yang juga
+belum diimplementasikan, ada di `docs/backend-requirements.md`. Tidak ada satupun dari ini yang
+diimplementasikan di sisi client selain kontrak di atas; `InternetRelayClient` adalah HTTP client
+tipis terhadap kontrak ini, strukturnya identik dengan `DeviceHttpClient`.

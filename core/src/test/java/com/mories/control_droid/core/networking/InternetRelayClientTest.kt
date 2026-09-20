@@ -10,6 +10,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -29,7 +30,6 @@ class InternetRelayClientTest {
         server.start()
         client = InternetRelayClient(
             deviceId = "device-uuid",
-            pin = "1234",
             accessToken = "access-token",
             baseUrl = server.url("").toString().trimEnd('/')
         )
@@ -41,7 +41,7 @@ class InternetRelayClientTest {
     }
 
     @Test
-    fun checkStatus_routesThroughDevicePathWithCredentials() {
+    fun checkStatus_routesThroughDevicePathWithTokenOnly() {
         server.enqueue(MockResponse().setResponseCode(200))
         var connected = false
         val callbackCompleted = CountDownLatch(1)
@@ -54,8 +54,10 @@ class InternetRelayClientTest {
         val request = server.takeRequest()
         assertTrue(callbackCompleted.await(2, TimeUnit.SECONDS))
         assertEquals("/v1/devices/device-uuid/status", request.path)
-        assertEquals("1234", request.getHeader("X-Control-Pin"))
         assertEquals("Bearer access-token", request.getHeader("Authorization"))
+        // The relay never accepts the legacy PIN — only an access token is strong enough to be
+        // internet-facing (see docs/backend-requirements.md §1.1) — so no PIN header is ever sent.
+        assertNull(request.getHeader("X-Control-Pin"))
         assertTrue(connected)
     }
 

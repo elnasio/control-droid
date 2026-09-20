@@ -17,6 +17,23 @@ Status implementasi hari ini:
 | Backend | **Belum ada sama sekali.** |
 | Target → Backend (koneksi outbound) | **Belum ada sama sekali** — Target app saat ini hanya bisa jadi server lokal (`TargetHttpServer`), tidak punya kode untuk terhubung keluar ke backend manapun. |
 
+### 1.1 Keputusan yang sudah diambil
+
+- **Kredensial mode Internet: token-only.** `InternetRelayClient` **tidak pernah** mengirim PIN
+  legacy ke relay — hanya `Authorization: Bearer {accessToken}` (dari `PairedDevice.accessToken`,
+  hasil pairing QR). PIN 4-digit tetap berlaku seperti biasa untuk mode Wi-Fi lokal
+  (`TargetHttpServer`/`DeviceHttpClient` tidak berubah), tapi tidak pernah dikirim ke endpoint
+  relay sama sekali. Konsekuensinya: device yang dipasangkan lewat alur PIN legacy saja (tanpa QR,
+  sehingga `accessToken` kosong) **tidak bisa** memakai mode Internet sampai dipasangkan ulang
+  lewat QR. `DeviceControlScreen` sudah menonaktifkan toggle "Kontrol via Internet" untuk kasus ini
+  dengan keterangan yang menjelaskan alasannya ke user.
+  - Alasan: PIN pendek yang cukup aman di dalam batas kepercayaan Wi-Fi lokal jadi rawan
+    brute-force kalau diterima sebagai kredensial internet-facing (lihat riwayat diskusi di §5.3
+    dan §8, item 6, sebelum keputusan ini diambil).
+  - Backend **wajib** memvalidasi hanya `Authorization: Bearer` untuk seluruh endpoint relay dan
+    menolak (`401`) request tanpa header itu, meski `X-Control-Pin` kebetulan ikut terkirim dari
+    client lama/rusak.
+
 ## 2. Masalah yang harus diselesaikan backend
 
 Di mode Wi-Fi, Target menjalankan HTTP server (`TargetHttpServer`, NanoHTTPD) dan Controller
@@ -67,7 +84,8 @@ Backend **wajib** melayani persis kontrak di `docs/internet-relay-api.md`:
 - `POST /v1/devices/{deviceId}/gesture`
 - `POST /v1/devices/{deviceId}/clipboard`
 - `GET /v1/devices/{deviceId}/screenshot`
-- Header `Authorization: Bearer {accessToken}` dan/atau `X-Control-Pin: {pin}`.
+- Header `Authorization: Bearer {accessToken}` — satu-satunya kredensial yang diterima (lihat
+  §1.1); tidak ada `X-Control-Pin` di kontrak relay.
 
 Ini sudah final dari sisi app Controller (kode client sudah ada dan sudah ada unit test-nya) —
 kalau backend memerlukan bentuk lain, ubahnya ada di `InternetRelayClient`, bukan hanya di backend.
@@ -138,19 +156,17 @@ ditangani UI sebagai "Tidak terhubung".
 2. **Request/response correlation** — setiap pesan ke Target dan balasannya harus dikorelasikan
    lewat `requestId` dengan timeout per-request, bukan asumsi balasan datang berurutan.
 3. **Autentikasi & otorisasi**:
-   - Backend memvalidasi `X-Control-Pin`/`Authorization` Controller sama seperti
-     `TargetHttpServer.hasValidCredentials()` di lokal (PIN ATAU token, salah satu valid cukup).
-   - **PIN 4-digit tidak boleh diperlakukan sama amannya di internet seperti di Wi-Fi lokal.** Di
-     LAN, batas kepercayaannya adalah "siapa yang bisa mengakses jaringan itu"; di internet, PIN
-     pendek jadi target brute-force dari mana saja. Requirement konkret:
-     - Backend **wajib** menerapkan rate-limit/lockout khusus pada percobaan autentikasi yang
-       gagal per `deviceId` (terpisah dari rate-limit umum di §4), mis. lockout sementara setelah
-       beberapa kali PIN salah berturut-turut.
-     - Direkomendasikan: mode Internet hanya menerima `accessToken` (32-byte, hasil QR pairing)
-       dan **menolak** autentikasi berbasis PIN saja untuk endpoint relay — PIN legacy tetap boleh
-       dipakai di Wi-Fi lokal seperti sekarang, tapi jangan diwarisi begitu saja sebagai kredensial
-       internet-facing. Ini butuh keputusan eksplisit (lihat §8.6) karena mengubah cakupan
-       `docs/internet-relay-api.md` §4.
+   - **Diputuskan (§1.1): token-only.** Backend memvalidasi `Authorization: Bearer {accessToken}`
+     saja untuk seluruh endpoint relay. `X-Control-Pin` tidak pernah dikirim `InternetRelayClient`
+     dan **wajib ditolak** kalau backend menerimanya tanpa `Authorization` yang valid — beda dari
+     `TargetHttpServer.hasValidCredentials()` lokal yang menerima PIN ATAU token.
+   - **Kenapa dibatasi**: PIN 4-digit yang cukup aman di dalam batas kepercayaan Wi-Fi lokal jadi
+     target brute-force kalau diterima sebagai kredensial internet-facing (di internet, jangkauan
+     penyerang tidak dibatasi "siapa yang ada di jaringan yang sama").
+   - Backend **tetap wajib** menerapkan rate-limit/lockout pada percobaan autentikasi token yang
+     gagal per `deviceId` (terpisah dari rate-limit umum di §4) — token 32-byte jauh lebih sulit
+     ditebak dibanding PIN, tapi endpoint autentikasi tetap perlu proteksi brute-force sebagai
+     lapisan pertahanan berlapis.
    - Backend juga perlu tahu Controller mana yang **boleh** mengontrol `deviceId` tersebut — ini
      setara `TrustedControllerStore` yang saat ini hanya hidup lokal di Target
      (lihat `PairingApprovalGate`/approval Terima-Tolak). Backend perlu versi servernya sendiri:
@@ -259,9 +275,8 @@ kecil ke app Controller (biasanya cuma ubah `InternetRelayClient`) tapi menentuk
    dan tidak stabil dibanding Wi-Fi lokal.
 5. **Pairing murni lewat internet** (§2.1) — apakah ini akan dibutuhkan di masa depan, dan kalau
    ya, siapa yang merancang alur approval-nya (setara `PairingApprovalGate` tapi lewat backend).
-6. **Kebijakan PIN untuk mode Internet** (§5.3) — apakah PIN legacy tetap diterima untuk relay,
-   atau mode Internet dibatasi hanya menerima `accessToken`. Ini mengubah cakupan
-   `docs/internet-relay-api.md` §4 kalau diputuskan membatasi.
+6. ~~**Kebijakan PIN untuk mode Internet**~~ — **sudah diputuskan, lihat §1.1**: token-only, PIN
+   legacy ditolak untuk seluruh endpoint relay.
 7. **Mekanisme propagasi revoke** (§5.3) — push dari Target saat online vs re-validasi per
    request ke Target. Menentukan apakah backend perlu menyimpan cache trust sama sekali.
 
@@ -284,9 +299,10 @@ Sebelum backend dianggap siap dipakai app Controller yang sudah ada (tanpa mengu
       Target itu (bukan cuma "device pernah dikenal") — lihat §6 poin Reliability.
 - [ ] Request ke `deviceId` yang Target-nya sedang offline mengembalikan `502`/`503` dalam batas
       timeout §4.4, bukan menggantung tanpa batas waktu.
-- [ ] Kredensial salah (PIN/token) mengembalikan `401` pada seluruh endpoint, bukan hanya
-      `/status`.
-- [ ] Rate-limit percobaan autentikasi gagal (§5.3) aktif dan teruji — beberapa kali PIN salah
+- [ ] `Authorization` yang salah/kosong mengembalikan `401` pada seluruh endpoint, bukan hanya
+      `/status`; `X-Control-Pin` yang dikirim tanpa `Authorization` valid tetap ditolak `401`
+      (§1.1) — token-only benar-benar ditegakkan, bukan cuma didokumentasikan.
+- [ ] Rate-limit percobaan autentikasi gagal (§5.3) aktif dan teruji — beberapa kali token salah
       berturut-turut memicu lockout sementara.
 - [ ] Revoke Controller di Target (lokal) terbukti memutus akses relay Controller itu dalam waktu
       wajar (bergantung mekanisme yang dipilih di §8.7).

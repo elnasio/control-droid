@@ -74,8 +74,11 @@ fun DeviceControlScreen(
         DeviceHttpClient(device.ip, pin = device.pin, accessToken = device.accessToken.orEmpty())
     }
     val internetClient = remember {
-        InternetRelayClient(deviceId = device.id, pin = device.pin, accessToken = device.accessToken.orEmpty())
+        InternetRelayClient(deviceId = device.id, accessToken = device.accessToken.orEmpty())
     }
+    // The relay never accepts the legacy PIN (see InternetRelayClient) — only an access token from
+    // QR pairing is strong enough to be internet-facing — so a PIN-only paired device can't use it.
+    val internetModeAvailable = !device.accessToken.isNullOrBlank()
     var transportMode by remember { mutableStateOf(ControlTransportMode.WIFI) }
     val activeClient: DeviceControlClient =
         if (transportMode == ControlTransportMode.INTERNET) internetClient else wifiClient
@@ -198,16 +201,19 @@ fun DeviceControlScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("Kontrol via Internet", style = MaterialTheme.typography.titleLarge)
                                 Text(
-                                    text = if (transportMode == ControlTransportMode.INTERNET) {
-                                        "Perintah dikirim lewat relay internet (backend belum aktif — siap disambungkan)."
-                                    } else {
-                                        "Perintah dikirim langsung lewat Wi-Fi lokal, seperti biasa."
+                                    text = when {
+                                        !internetModeAvailable ->
+                                            "Device ini dipasangkan pakai PIN tanpa token — pairing ulang lewat QR untuk mengaktifkan mode Internet."
+                                        transportMode == ControlTransportMode.INTERNET ->
+                                            "Perintah dikirim lewat relay internet (backend belum aktif — siap disambungkan)."
+                                        else -> "Perintah dikirim langsung lewat Wi-Fi lokal, seperti biasa."
                                     },
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Switch(
                                 checked = transportMode == ControlTransportMode.INTERNET,
+                                enabled = internetModeAvailable,
                                 onCheckedChange = {
                                     transportMode = if (it) {
                                         ControlTransportMode.INTERNET
