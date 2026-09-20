@@ -20,27 +20,44 @@ import java.util.concurrent.TimeUnit
 
 private const val PIN_HEADER = "X-Control-Pin"
 private const val TOKEN_HEADER = "X-Control-Token"
+private const val CONTROLLER_ID_HEADER = "X-Controller-Id"
+private const val CONTROLLER_NAME_HEADER = "X-Controller-Name"
+
+// The Target may hold a /pair request open while it waits for a human tap on Terima/Tolak
+// (see PairingApprovalGate, up to 45s), so pairing calls need a much longer timeout than the
+// few-second budget that's appropriate for a regular action/gesture call.
+private const val PAIRING_TIMEOUT_SECONDS = 50L
 
 class DeviceHttpClient(
     private val targetIp: String,
     private val targetPort: Int = ConstantValue.PORT_VALUE,
     private val pin: String,
     private val accessToken: String = "",
+    private val controllerId: String = "",
+    private val controllerName: String = "",
 ) {
     private val client = OkHttpClient.Builder().callTimeout(3, TimeUnit.SECONDS).build()
+    private val pairingClient = OkHttpClient.Builder().callTimeout(PAIRING_TIMEOUT_SECONDS, TimeUnit.SECONDS).build()
     private val gson = Gson()
 
     data class ScreenshotResult(val statusCode: Int, val bytes: ByteArray?)
 
-    fun ping(onResult: (Boolean) -> Unit) {
-        val request = Request.Builder().url("http://$targetIp:$targetPort/ping").build()
+    /**
+     * Checks whether this client's stored PIN/token would actually authorize a real
+     * action/gesture/screenshot call right now. Unlike a bare /ping (which only proves the
+     * Target's server is reachable), this reports "connected" only when credentials are
+     * genuinely valid, so the Controller UI never shows Terhubung for a device whose PIN/token
+     * has since changed or been revoked.
+     */
+    fun checkStatus(onResult: (Boolean) -> Unit) {
+        val request = authorizedRequest("/status").get().build()
         client.newCall(request).enqueue(object : Callback {
             override fun onResponse(call: Call, response: Response) {
                 response.use { onResult(it.isSuccessful) }
             }
 
             override fun onFailure(call: Call, e: IOException) {
-                Log.e("DeviceHttpClient", "Ping failed: ${e.message}")
+                Log.e("DeviceHttpClient", "Status check failed: ${e.message}")
                 onResult(false)
             }
         })
@@ -78,9 +95,33 @@ class DeviceHttpClient(
         val request = Request.Builder()
             .url("http://$targetIp:$targetPort/pair")
             .addHeader(TOKEN_HEADER, token)
+            .applyControllerIdentity()
             .get()
             .build()
-        client.newCall(request).enqueue(object : Callback {
+        pairingClient.newCall(request).enqueue(object : Callback {
+            override fun onResponse(call: Call, response: Response) {
+                response.use { onResult(it.isSuccessful, it.body?.string()) }
+            }
+
+            override fun onFailure(call: Call, e: IOException) {
+                onResult(false, e.message)
+            }
+        })
+    }
+
+    /**
+     * Validates [pin] against the Target's /pair endpoint before it's saved as a paired device,
+     * mirroring [verifyPairing] for the legacy PIN flow so a wrong PIN is rejected immediately
+     * instead of being silently stored and only failing on the first real action later.
+     */
+    fun verifyPin(pin: String, onResult: (Boolean, String?) -> Unit) {
+        val request = Request.Builder()
+            .url("http://$targetIp:$targetPort/pair")
+            .addHeader(PIN_HEADER, pin)
+            .applyControllerIdentity()
+            .get()
+            .build()
+        pairingClient.newCall(request).enqueue(object : Callback {
             override fun onResponse(call: Call, response: Response) {
                 response.use { onResult(it.isSuccessful, it.body?.string()) }
             }
@@ -129,5 +170,10 @@ class DeviceHttpClient(
         if (accessToken.isNotBlank()) builder.addHeader(TOKEN_HEADER, accessToken)
         if (pin.isNotBlank()) builder.addHeader(PIN_HEADER, pin)
         return builder
+    }
+
+    private fun Request.Builder.applyControllerIdentity(): Request.Builder = apply {
+        if (controllerId.isNotBlank()) addHeader(CONTROLLER_ID_HEADER, controllerId)
+        if (controllerName.isNotBlank()) addHeader(CONTROLLER_NAME_HEADER, controllerName)
     }
 }

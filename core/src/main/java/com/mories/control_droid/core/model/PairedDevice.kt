@@ -81,3 +81,16 @@ data class Macro(
     val name: String,
     val actions: List<DeviceAction>
 )
+
+/** A Controller the Target has approved; remembered so it never has to ask for approval again. */
+data class TrustedController(
+    val id: String,
+    val name: String,
+    val approvedAt: Long
+)
+
+/** A pairing request currently waiting on the Target user to tap Terima/Tolak. */
+data class PendingPairingRequest(
+    val controllerId: String,
+    val controllerName: String
+)

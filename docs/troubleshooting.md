@@ -55,11 +55,14 @@ Expected body: `ControlDroid`. Jika tidak ada response, masalah berada di server
 Gejala dan penyebab umum:
 
 - **QR invalid**: hasil scanner bukan prefix `controldroid://pair?` atau payload rusak.
-- **401 dari `/pair`**: token salah, token sudah diregenerate, atau QR terlalu lama.
+- **401 dari `/pair`**: token/PIN salah, token sudah diregenerate, QR terlalu lama, atau user menekan **Tolak** pada dialog approval di Target.
+- **Controller tampak menggantung "Menunggu persetujuan di Target..." lalu gagal setelah ~45 detik**: dialog "Permintaan pairing" muncul di layar Target tapi tidak ada yang menekan Terima/Tolak dalam 45 detik (lihat `PairingApprovalGate`, `PAIRING_APPROVAL_TIMEOUT_MS`). Buka layar Target dan tekan Terima sebelum timeout; kalau Target sedang terkunci/di background, dialog tidak akan terlihat sampai layar dibuka lagi meski request tetap menunggu di background selama itu.
 - **Timeout**: IP yang dibawa QR sudah berubah atau device tidak reachable.
-- **Pair berhasil tetapi control gagal**: token tersimpan salah, PIN legacy kosong/salah, atau endpoint sensitif tidak reachable.
+- **Pair berhasil tetapi control gagal**: token tersimpan salah, PIN legacy kosong/salah, atau endpoint sensitif tidak reachable. Cek `GET /status` (lihat `docs/http-api.md`) untuk memastikan kredensial yang tersimpan Controller masih valid — ini juga yang menentukan status "Terhubung" di `DeviceControlScreen`.
 
 Regenerate QR/token pada Target, lalu scan ulang. Token lama memang harus ditolak setelah regenerate.
+
+Controller yang **sudah pernah disetujui** (tercatat di kartu "Controller terpercaya" pada Target) tidak akan diminta approval lagi selama entrinya belum dihapus lewat tombol "Hapus akses" di Target. Kalau perlu memutus akses sebuah Controller, hapus dari daftar itu — bukan dari sisi Controller.
 
 ## 4. Aksi Back/Home/Recent tidak bekerja
 

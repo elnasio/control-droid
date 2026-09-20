@@ -17,9 +17,9 @@ Gunakan tiga level bukti:
 | Test | Coverage |
 |---|---|
 | `PairingQrPayloadTest` | Encode/decode payload dan invalid prefix. |
-| `CoreStateTest` | PIN, pairing token, role, paired device store, macro store. |
+| `CoreStateTest` | PIN, pairing token, role, paired device store (termasuk dedup by-IP), macro store, controller identity store, trusted controller store, `PairingApprovalGate` (approve/reject/timeout). |
 | `PairingQrCodeGeneratorTest` | Ukuran bitmap dan adanya pola QR. |
-| `DeviceHttpClientTest` | Command, credential headers, gesture JSON, clipboard JSON, screenshot response. |
+| `DeviceHttpClientTest` | Command, credential headers, controller-identity headers, `/status` check, gesture JSON, clipboard JSON, screenshot response. |
 
 Robolectric dipakai untuk Android `Context`, SharedPreferences, dan Bitmap. MockWebServer dipakai untuk request contract tanpa device target.
 

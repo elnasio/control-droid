@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">control-droid</string>
+    <string name="app_name">ControlDroid</string>
     <string name="accessibility_service_desc">
         ControlDroid digunakan untuk mengontrol perangkat Android Anda dari perangkat lain. Layanan ini memerlukan izin Aksesibilitas untuk melakukan navigasi seperti tombol kembali, home, dan lainnya secara otomatis.
     </string>

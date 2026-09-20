@@ -6,18 +6,22 @@ import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,8 +31,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.mories.control_droid.core.ConstantValue
+import com.mories.control_droid.core.auth.PairingApprovalGate
 import com.mories.control_droid.core.auth.PairingTokenStore
 import com.mories.control_droid.core.auth.PinVerifier
+import com.mories.control_droid.core.auth.TrustedControllerStore
 import com.mories.control_droid.core.control.NetworkAddress
 import com.mories.control_droid.core.control.PairingQrCodeGenerator
 import com.mories.control_droid.core.control.ScreenCaptureManager
@@ -38,8 +44,10 @@ import com.mories.control_droid.ui.components.AppToolbar
 import com.mories.control_droid.ui.components.PairingQrCard
 import com.mories.control_droid.ui.components.PinDialog
 import com.mories.control_droid.ui.components.StatusBadge
+import kotlinx.coroutines.delay
 
 private const val TAG = "TargetWaiting"
+private const val CONTROLLER_ACTIVITY_TIMEOUT_MS = 6_000L
 
 private data class TargetSession(
     val pinVerifier: PinVerifier,
@@ -118,6 +126,36 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
         }
     }
 
+    val trustedControllerStore = remember { TrustedControllerStore(context) }
+    val lastControllerActivityAt by TargetHttpServer.lastControllerActivityAt.collectAsState()
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    var trustedControllers by remember { mutableStateOf(trustedControllerStore.getAll()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1_000)
+            now = System.currentTimeMillis()
+            trustedControllers = trustedControllerStore.getAll()
+        }
+    }
+    val isControllerConnected = lastControllerActivityAt?.let { now - it < CONTROLLER_ACTIVITY_TIMEOUT_MS } ?: false
+
+    val pendingPairingRequest by PairingApprovalGate.pendingRequest.collectAsState()
+    pendingPairingRequest?.let { request ->
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Permintaan pairing") },
+            text = {
+                Text("\"${request.controllerName}\" ingin memasangkan diri dan mengontrol perangkat ini.")
+            },
+            confirmButton = {
+                TextButton(onClick = { PairingApprovalGate.approve() }) { Text("Terima") }
+            },
+            dismissButton = {
+                TextButton(onClick = { PairingApprovalGate.reject() }) { Text("Tolak") }
+            }
+        )
+    }
+
     if (showPinDialog) {
         PinSetupDialog(
             onDismiss = { showPinDialog = false },
@@ -144,13 +182,17 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
             item {
                 Text("Perangkat siap digunakan", style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    text = "$deviceName menunggu koneksi dari Controller.",
+                    text = if (isControllerConnected) {
+                        "$deviceName sedang terhubung dengan Controller."
+                    } else {
+                        "$deviceName menunggu koneksi dari Controller."
+                    },
                     modifier = Modifier.padding(top = 4.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 StatusBadge(
-                    label = "Menunggu controller",
-                    active = true,
+                    label = if (isControllerConnected) "Terhubung dengan controller" else "Menunggu controller",
+                    active = isControllerConnected,
                     modifier = Modifier.padding(top = 10.dp)
                 )
             }
@@ -208,6 +250,39 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
                                 .padding(top = 12.dp)
                         ) {
                             Text(if (isPinSet) "Ganti PIN" else "Atur PIN")
+                        }
+                    }
+                }
+            }
+            item {
+                ElevatedCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Controller terpercaya", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            text = if (trustedControllers.isEmpty()) {
+                                "Belum ada Controller yang disetujui. Setiap pairing baru akan meminta persetujuan di sini."
+                            } else {
+                                "Controller berikut sudah disetujui dan tidak akan diminta pairing ulang."
+                            },
+                            modifier = Modifier.padding(top = 6.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        trustedControllers.forEach { controller ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                            ) {
+                                Text(controller.name, modifier = Modifier.weight(1f))
+                                TextButton(onClick = {
+                                    trustedControllerStore.revoke(controller.id)
+                                    trustedControllers = trustedControllerStore.getAll()
+                                }) {
+                                    Text("Hapus akses")
+                                }
+                            }
                         }
                     }
                 }

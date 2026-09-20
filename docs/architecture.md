@@ -98,9 +98,10 @@ Semua route tetap berada di satu `NavHost`. Screen yang membuka sub-flow menerim
 1. Controller membuka `AddDeviceScreen`.
 2. Target membuat payload `controldroid://pair?...` berisi version, name, IP, port, dan token.
 3. Controller memindai QR dengan ZXing.
-4. Controller decode payload, lalu melakukan `GET /pair` dengan `X-Control-Token`.
-5. Jika sukses, Controller menyimpan `PairedDevice` dengan access token.
-6. Controller kembali ke route `control/{id}`.
+4. Controller decode payload, lalu melakukan `GET /pair` dengan `X-Control-Token` plus `X-Controller-Id`/`X-Controller-Name` dari `ControllerIdentityStore` (id UUID persisten per instalasi Controller).
+5. Jika `X-Controller-Id` ini belum pernah disetujui Target, request tersebut menahan koneksi (lihat `PairingApprovalGate` di bagian Target flow) sampai user menekan Terima/Tolak di Target atau timeout 45 detik.
+6. Jika sukses (baik karena sudah trusted maupun baru disetujui), Controller menyimpan `PairedDevice` dengan access token. Re-pairing IP yang sama memakai ulang `id` entri lama (`PairedDeviceStore.saveDevice`) alih-alih menambah baris baru.
+7. Controller kembali ke route `control/{id}`.
 
 ### Discovery fallback
 
@@ -108,20 +109,20 @@ Semua route tetap berada di satu `NavHost`. Screen yang membuka sub-flow menerim
 2. Scanner mengambil prefix `/24` dari IP tersebut.
 3. Host `1..254` dipanggil secara paralel ke `GET /ping` dengan timeout 300 ms.
 4. Response yang mengandung `ControlDroid` dianggap sebagai Target.
-5. User memilih device dan memasukkan PIN legacy.
+5. User memilih device; jika IP tersebut belum pernah dipasangkan, memasukkan PIN legacy yang divalidasi via `DeviceHttpClient.verifyPin` (`GET /pair` dengan `X-Control-Pin`, tunduk pada alur approval yang sama seperti QR) sebelum disimpan. Jika IP sudah ada di `PairedDeviceStore`, Controller langsung memakai kredensial tersimpan tanpa dialog PIN baru.
 
 Discovery hanya menemukan device dalam asumsi subnet `/24`; router, VPN, guest isolation, firewall, atau jaringan non-/24 dapat membuat device tidak ditemukan.
 
 ### Control
 
-`DeviceControlScreen` membuat `DeviceHttpClient` dari IP, port default 8080, PIN, dan access token. Semua aksi dikirim asynchronous:
+`DeviceControlScreen` membuat `DeviceHttpClient` dari IP, port default 8080, PIN, dan access token. Status "Terhubung" berasal dari `GET /status` (`DeviceHttpClient.checkStatus`) — endpoint ringan yang memvalidasi Token/PIN tanpa memicu approval — bukan dari `/ping`, supaya status tidak pernah salah melaporkan "Terhubung" saat kredensial sebenarnya sudah tidak valid. Semua aksi dikirim asynchronous:
 
-- Back, Home, Recent → `POST /action`.
+- Back, Home, Recent → `POST /action`, dengan feedback hasil kirim ditampilkan sebagai Toast.
 - Live preview → `POST /action` `capture_screen`, lalu navigasi ke preview.
 - Clipboard → `POST /clipboard`.
 - Clipboard + paste → `POST /clipboard` dengan `paste=true`.
 
-Control pad berada di screen yang sama dan hanya aktif jika ping awal berhasil. Arah atas/bawah/kiri/kanan dipetakan menjadi `GestureRequest` swipe normalized dari area tengah layar Target, lalu dikirim melalui endpoint `/gesture` yang sudah ada.
+Tombol Back/Home/Recent dan Control pad hanya aktif jika `checkStatus` awal berhasil. Arah atas/bawah/kiri/kanan Control pad dipetakan menjadi `GestureRequest` swipe normalized dari area tengah layar Target, lalu dikirim melalui endpoint `/gesture` yang sudah ada.
 
 ### Remote preview
 
@@ -139,6 +140,16 @@ Gesture pada `RemotePreviewSurface` dikonversi menjadi koordinat `0..1` berdasar
 ### HTTP server
 
 `TargetHttpServer` adalah singleton NanoHTTPD pada port `8080`. Server di-start oleh `TargetWaitingScreen` dan menggunakan application context provider. Endpoint sensitif memeriksa token atau PIN sebelum menjalankan aksi.
+
+### Pairing approval
+
+NanoHTTPD menangani setiap koneksi di thread-nya sendiri, sehingga menahan satu request `/pair` (menunggu keputusan user) tidak memblokir request lain yang sedang berjalan (`/ping`, `/action`, dsb dari Controller lain).
+
+- `PairingApprovalGate` (singleton, `:core`) menjembatani thread HTTP tersebut dengan Compose UI: `requestApproval(controllerId, controllerName, timeoutMs)` mem-block via `CountDownLatch` sambil mem-publish `PendingPairingRequest` ke `StateFlow` yang diobservasi `TargetWaitingScreen`; `approve()`/`reject()` dipanggil dari tombol dialog di UI thread. Hanya satu approval yang tampil sekaligus — request kedua menunggu giliran lewat `ReentrantLock`.
+- `TrustedControllerStore` (`:core/auth`) menyimpan daftar `TrustedController(id, name, approvedAt)` yang sudah disetujui, di-render sebagai kartu "Controller terpercaya" (dengan tombol "Hapus akses" per entri) di `TargetWaitingScreen`.
+- `ControllerIdentityStore` (`:core/auth`, sisi Controller) meng-generate dan menyimpan UUID + nama tampilan sekali per instalasi, dikirim sebagai `X-Controller-Id`/`X-Controller-Name` pada setiap panggilan `/pair`.
+
+Lihat `docs/http-api.md` §3 untuk detail alur request/response `/pair` dan `/status`.
 
 ### Accessibility
 
@@ -170,6 +181,8 @@ Jika permission dicabut atau service berhenti, preview tidak mendapatkan frame b
 | `PairingTokenStore` | `pairing_security` | `access_token` | token random 32 byte Base64 URL-safe |
 | `PairedDeviceStore` | `paired_devices` | `devices` | JSON list paired device |
 | `MacroStore` | `macros` | `saved_macros` | JSON list macro |
+| `ControllerIdentityStore` (Controller) | `controller_identity` | `controller_id` | UUID persisten instalasi Controller |
+| `TrustedControllerStore` (Target) | `trusted_controllers` | `controllers` | JSON list `TrustedController` yang sudah disetujui |
 
 Data pairing dan macro bersifat lokal per installation. Tidak ada sinkronisasi antar device atau backup cloud yang dikelola aplikasi.
 

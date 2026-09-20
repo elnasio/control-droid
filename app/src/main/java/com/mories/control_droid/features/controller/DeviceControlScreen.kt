@@ -1,5 +1,6 @@
 package com.mories.control_droid.features.controller
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,9 +22,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.mories.control_droid.core.model.DeviceAction
@@ -37,33 +40,40 @@ import com.mories.control_droid.ui.components.ControlActionButton
 import com.mories.control_droid.ui.components.ControlPad
 import com.mories.control_droid.ui.components.ControlPadDirection
 import com.mories.control_droid.ui.components.StatusBadge
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @Composable
 fun DeviceControlScreen(
     navController: NavController, device: PairedDevice
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val client = remember {
         DeviceHttpClient(device.ip, pin = device.pin, accessToken = device.accessToken.orEmpty())
     }
     var connected by remember { mutableStateOf(false) }
     var clipboardText by remember { mutableStateOf("") }
     var clipboardStatus by remember { mutableStateOf<String?>(null) }
-    var navActionStatus by remember { mutableStateOf<String?>(null) }
     var showControlPad by remember { mutableStateOf(false) }
 
     fun sendNavAction(action: DeviceAction) {
-        navActionStatus = null
         client.sendAction(action) { success ->
-            navActionStatus = if (success) {
+            val message = if (success) {
                 "${action.label} terkirim"
             } else {
                 "Gagal mengirim ${action.label} — cek koneksi dan Accessibility di Target"
+            }
+            // sendAction's callback runs on OkHttp's background dispatcher thread; Toast must be
+            // shown from the main thread.
+            scope.launch(Dispatchers.Main) {
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     LaunchedEffect(Unit) {
-        client.ping { reachable -> connected = reachable }
+        client.checkStatus { reachableAndAuthorized -> connected = reachableAndAuthorized }
     }
 
     Scaffold(
@@ -119,9 +129,6 @@ fun DeviceControlScreen(
                             enabled = connected,
                             onClick = { sendNavAction(DeviceAction.GLOBAL_RECENT) }
                         )
-                        navActionStatus?.let {
-                            Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
                     }
                 }
             }

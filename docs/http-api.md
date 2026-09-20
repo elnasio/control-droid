@@ -10,19 +10,24 @@
 - Header autentikasi yang digunakan client:
   - `X-Control-Token`
   - `X-Control-Pin`
+  - `X-Controller-Id` — UUID persisten milik instalasi Controller (lihat `ControllerIdentityStore`), wajib untuk `/pair`.
+  - `X-Controller-Name` — nama tampilan Controller (mis. `Build.MANUFACTURER + Build.MODEL`), dipakai pada dialog approval dan daftar Controller terpercaya di Target.
 
 ## 2. Auth policy
 
-| Endpoint | Token | PIN | Keterangan |
+| Endpoint | Token/PIN | Controller-Id | Keterangan |
 |---|---:|---:|---|
 | `GET /ping` | Tidak | Tidak | Discovery terbuka. |
-| `GET /pair` | Wajib valid | Tidak diterima | Hanya token dari QR. |
-| `POST /action` | Salah satu valid | Salah satu valid | OR, bukan AND. |
-| `POST /gesture` | Salah satu valid | Salah satu valid | OR, bukan AND. |
-| `POST /clipboard` | Salah satu valid | Salah satu valid | OR, bukan AND. |
-| `GET /screenshot` | Salah satu valid | Salah satu valid | OR, bukan AND. |
+| `GET /pair` | Wajib salah satu valid | Wajib | Lihat alur approval di bawah. |
+| `GET /status` | Wajib salah satu valid | Tidak | Cek cepat tanpa approval; dipakai Controller untuk status "Terhubung" yang jujur. |
+| `POST /action` | Salah satu valid | Tidak | OR, bukan AND. |
+| `POST /gesture` | Salah satu valid | Tidak | OR, bukan AND. |
+| `POST /clipboard` | Salah satu valid | Tidak | OR, bukan AND. |
+| `GET /screenshot` | Salah satu valid | Tidak | OR, bukan AND. |
 
 Token yang valid adalah token yang sedang tersimpan pada Target. Regenerasi token langsung membuat token lama tidak valid. PIN hanya valid jika sudah diatur melalui Target screen.
+
+Trust (lihat `TrustedControllerStore`) hanya menggerbangi `/pair` — begitu sebuah `X-Controller-Id` disetujui, `/pair` berikutnya dari id yang sama langsung sukses tanpa approval lagi. Endpoint kontrol nyata (`/action`, `/gesture`, `/clipboard`, `/screenshot`, `/status`) tetap digerbangi murni oleh Token/PIN seperti sebelumnya; mengganti PIN di Target langsung membuat Controller lama gagal di endpoint-endpoint ini walau `X-Controller-Id`-nya masih tercatat trusted.
 
 ## 3. Endpoint
 
@@ -41,30 +46,58 @@ Endpoint ini sengaja tidak memakai auth supaya discovery dapat dilakukan sebelum
 
 ### `GET /pair`
 
-Memvalidasi access token dari QR.
+Memvalidasi access token (QR) atau PIN (scan subnet legacy), lalu — jika `X-Controller-Id` belum pernah disetujui — menahan koneksi ini (blocking, di thread NanoHTTPD milik koneksi tersebut saja, tidak memblokir request lain) sampai user menekan Terima/Tolak di dialog "Permintaan pairing" pada Target, atau timeout.
 
-Request:
+Request (QR):
 
 ```http
 GET /pair HTTP/1.1
 Host: 192.168.1.20:8080
 X-Control-Token: <access-token>
+X-Controller-Id: <uuid-controller>
+X-Controller-Name: Pixel 3a
 ```
 
-Response valid:
+Request (PIN legacy) memakai `X-Control-Pin` alih-alih `X-Control-Token`, header `X-Controller-Id`/`X-Controller-Name` tetap wajib.
+
+Alur server:
+
+1. Token/PIN tidak valid, atau `X-Controller-Id` tidak dikirim → langsung `401`, tidak ada approval.
+2. `X-Controller-Id` sudah ada di `TrustedControllerStore` → langsung `200`, tanpa dialog (inilah yang membuat Controller yang sama tidak perlu pairing ulang).
+3. `X-Controller-Id` baru → tampilkan dialog approval di Target (lihat `PairingApprovalGate`), tunggu maksimum 45 detik:
+   - Ditekan **Terima** → id disimpan ke `TrustedControllerStore`, response `200`.
+   - Ditekan **Tolak**, atau 45 detik lewat tanpa respons → response `401`.
+
+Karena approval bisa menahan koneksi hingga puluhan detik, client (`DeviceHttpClient.verifyPairing`/`verifyPin`) memakai `OkHttpClient` terpisah dengan timeout 50 detik — jangan pakai timeout pendek biasa (3 detik) untuk memanggil endpoint ini.
+
+Response disetujui/sudah trusted:
 
 ```json
 {"name":"ControlDroid"}
 ```
 
-Response token invalid:
+Response ditolak/timeout/kredensial salah:
 
 ```text
 401 Unauthorized
-Unauthorized
+Pairing ditolak atau tidak dikonfirmasi tepat waktu di Target
 ```
 
-PIN legacy tidak dapat digunakan untuk endpoint pairing QR.
+(atau body `Unauthorized` polos jika kredensial/`X-Controller-Id` yang gagal, bukan keputusan user).
+
+### `GET /status`
+
+Cek cepat (tanpa approval, tanpa `X-Controller-Id`) apakah Token/PIN yang tersimpan pada `PairedDevice` saat ini masih valid — dipakai `DeviceControlScreen` untuk menampilkan status "Terhubung" yang benar-benar mencerminkan kredensial, bukan sekadar `/ping` yang cuma membuktikan server menyala.
+
+Request:
+
+```http
+GET /status HTTP/1.1
+Host: 192.168.1.20:8080
+X-Control-Pin: 1234
+```
+
+Response valid: `200` `{"name":"ControlDroid"}`. Response tidak valid: `401` `Unauthorized`. Endpoint ini tidak pernah memicu dialog approval — Controller yang kredensialnya sudah tidak valid (mis. PIN diganti di Target) akan langsung dilaporkan sebagai tidak terhubung, bukan digantung menunggu approval.
 
 ### `POST /action`
 

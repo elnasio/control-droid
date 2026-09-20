@@ -9,6 +9,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -30,13 +31,49 @@ class DeviceHttpClientTest {
             targetIp = "127.0.0.1",
             targetPort = server.port,
             pin = "1234",
-            accessToken = "access-token"
+            accessToken = "access-token",
+            controllerId = "controller-uuid",
+            controllerName = "Pixel 3a"
         )
     }
 
     @After
     fun tearDown() {
         server.shutdown()
+    }
+
+    @Test
+    fun checkStatus_sendsCredentialsAndReportsAuthorization() {
+        server.enqueue(MockResponse().setResponseCode(200))
+        var connected = false
+        val callbackCompleted = CountDownLatch(1)
+
+        client.checkStatus {
+            connected = it
+            callbackCompleted.countDown()
+        }
+
+        val request = server.takeRequest()
+        assertTrue(callbackCompleted.await(2, TimeUnit.SECONDS))
+        assertEquals("/status", request.path)
+        assertEquals("1234", request.getHeader("X-Control-Pin"))
+        assertEquals("access-token", request.getHeader("X-Control-Token"))
+        assertTrue(connected)
+    }
+
+    @Test
+    fun checkStatus_reportsDisconnectedOnUnauthorized() {
+        server.enqueue(MockResponse().setResponseCode(401))
+        var connected = true
+        val callbackCompleted = CountDownLatch(1)
+
+        client.checkStatus {
+            connected = it
+            callbackCompleted.countDown()
+        }
+
+        assertTrue(callbackCompleted.await(2, TimeUnit.SECONDS))
+        assertFalse(connected)
     }
 
     @Test
@@ -84,6 +121,62 @@ class DeviceHttpClientTest {
         val body = request.body.readUtf8()
         assertTrue(body.contains("\"text\":\"hello\""))
         assertTrue(body.contains("\"paste\":true"))
+    }
+
+    @Test
+    fun verifyPairing_sendsTokenAndControllerIdentityHeaders() {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("{\"name\":\"ControlDroid\"}"))
+        var result: Pair<Boolean, String?>? = null
+        val callbackCompleted = CountDownLatch(1)
+
+        client.verifyPairing("qr-token") { success, message ->
+            result = success to message
+            callbackCompleted.countDown()
+        }
+
+        val request = server.takeRequest()
+        assertTrue(callbackCompleted.await(2, TimeUnit.SECONDS))
+        assertEquals("/pair", request.path)
+        assertEquals("qr-token", request.getHeader("X-Control-Token"))
+        assertEquals("controller-uuid", request.getHeader("X-Controller-Id"))
+        assertEquals("Pixel 3a", request.getHeader("X-Controller-Name"))
+        assertTrue(result?.first == true)
+    }
+
+    @Test
+    fun verifyPin_sendsPinHeaderToPairEndpoint() {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("{\"name\":\"ControlDroid\"}"))
+        var result: Pair<Boolean, String?>? = null
+        val callbackCompleted = CountDownLatch(1)
+
+        client.verifyPin("4321") { success, message ->
+            result = success to message
+            callbackCompleted.countDown()
+        }
+
+        val request = server.takeRequest()
+        assertTrue(callbackCompleted.await(2, TimeUnit.SECONDS))
+        assertEquals("/pair", request.path)
+        assertEquals("4321", request.getHeader("X-Control-Pin"))
+        assertEquals("controller-uuid", request.getHeader("X-Controller-Id"))
+        assertEquals("Pixel 3a", request.getHeader("X-Controller-Name"))
+        assertTrue(result?.first == true)
+    }
+
+    @Test
+    fun verifyPin_reportsFailureOnUnauthorized() {
+        server.enqueue(MockResponse().setResponseCode(401).setBody("Unauthorized"))
+        var result: Pair<Boolean, String?>? = null
+        val callbackCompleted = CountDownLatch(1)
+
+        client.verifyPin("0000") { success, message ->
+            result = success to message
+            callbackCompleted.countDown()
+        }
+
+        assertTrue(callbackCompleted.await(2, TimeUnit.SECONDS))
+        assertEquals(false, result?.first)
+        assertEquals("Unauthorized", result?.second)
     }
 
     @Test

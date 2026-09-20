@@ -23,7 +23,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.mories.control_droid.core.auth.ControllerIdentityStore
 import com.mories.control_droid.core.control.DeviceScanner
 import com.mories.control_droid.core.model.PairingQrPayload
 import com.mories.control_droid.core.model.PairedDevice
@@ -45,8 +47,11 @@ fun AddDeviceScreen(
     onDeviceFound: (PairedDevice) -> Unit,
     onBackClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    val controllerIdentity = remember { ControllerIdentityStore(context) }
     var devices by remember { mutableStateOf<List<PairedDevice>>(emptyList()) }
     var isScanning by remember { mutableStateOf(false) }
+    var isAwaitingApproval by remember { mutableStateOf(false) }
     var pendingDevice by remember { mutableStateOf<PairedDevice?>(null) }
     var pairingError by remember { mutableStateOf<String?>(null) }
     val mainScope = remember { MainScope() }
@@ -55,16 +60,18 @@ fun AddDeviceScreen(
         if (payload == null) {
             pairingError = if (result.contents == null) "QR scan dibatalkan" else "QR ControlDroid tidak valid"
         } else {
-            isScanning = true
+            isAwaitingApproval = true
             pairingError = null
             DeviceHttpClient(
                 targetIp = payload.ip,
                 targetPort = payload.port,
                 pin = "",
-                accessToken = payload.token
+                accessToken = payload.token,
+                controllerId = controllerIdentity.getOrCreateId(),
+                controllerName = controllerIdentity.displayName()
             ).verifyPairing(payload.token) { valid, message ->
                 mainScope.launch(Dispatchers.Main) {
-                    isScanning = false
+                    isAwaitingApproval = false
                     if (valid) {
                         // Reuse the existing entry's id/pin when this IP is already paired, so
                         // re-scanning the same Target updates it in place instead of adding a
@@ -109,7 +116,26 @@ fun AddDeviceScreen(
             onDismiss = { pendingDevice = null },
             onConfirm = { pin ->
                 pendingDevice = null
-                onDeviceFound(device.copy(pin = pin))
+                isAwaitingApproval = true
+                pairingError = null
+                // Validate the PIN against the Target before saving it, mirroring the QR flow's
+                // token check, so a wrong PIN is rejected immediately instead of being silently
+                // stored and only failing later on the first real action.
+                DeviceHttpClient(
+                    targetIp = device.ip,
+                    pin = pin,
+                    controllerId = controllerIdentity.getOrCreateId(),
+                    controllerName = controllerIdentity.displayName()
+                ).verifyPin(pin) { valid, message ->
+                    mainScope.launch(Dispatchers.Main) {
+                        isAwaitingApproval = false
+                        if (valid) {
+                            onDeviceFound(device.copy(pin = pin))
+                        } else {
+                            pairingError = "PIN ditolak oleh ${device.name}: ${message ?: "tidak diketahui"}"
+                        }
+                    }
+                }
             }
         )
     }
@@ -174,6 +200,23 @@ fun AddDeviceScreen(
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.padding(16.dp)
                         )
+                    }
+                }
+            }
+            if (isAwaitingApproval) {
+                item {
+                    ElevatedCard {
+                        androidx.compose.foundation.layout.Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text("Menunggu persetujuan di Target...", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = "Buka layar Target dan ketuk Terima pada permintaan pairing.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
                     }
                 }
             }
