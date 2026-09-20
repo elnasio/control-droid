@@ -2,23 +2,34 @@ package com.mories.control_droid.features.controller
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,19 +37,24 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.mories.control_droid.core.model.DeviceAction
 import com.mories.control_droid.core.model.GestureRequest
 import com.mories.control_droid.core.model.GestureType
 import com.mories.control_droid.core.model.PairedDevice
 import com.mories.control_droid.core.networking.DeviceHttpClient
-import com.mories.control_droid.ui.NavigationTarget
+import com.mories.control_droid.features.viewmodel.RemotePreviewEvent
+import com.mories.control_droid.features.viewmodel.RemotePreviewViewModel
 import com.mories.control_droid.ui.components.AppToolbar
 import com.mories.control_droid.ui.components.ControlActionButton
 import com.mories.control_droid.ui.components.ControlPad
 import com.mories.control_droid.ui.components.ControlPadDirection
+import com.mories.control_droid.ui.components.RemotePreviewSurface
 import com.mories.control_droid.ui.components.StatusBadge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,6 +72,10 @@ fun DeviceControlScreen(
     var clipboardText by remember { mutableStateOf("") }
     var clipboardStatus by remember { mutableStateOf<String?>(null) }
     var showControlPad by remember { mutableStateOf(false) }
+    var showLivePreview by remember { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
+    val previewViewModel: RemotePreviewViewModel = viewModel()
+    val previewState by previewViewModel.uiState.collectAsState()
 
     fun sendNavAction(action: DeviceAction) {
         client.sendAction(action) { success ->
@@ -76,6 +96,21 @@ fun DeviceControlScreen(
         client.checkStatus { reachableAndAuthorized -> connected = reachableAndAuthorized }
     }
 
+    LaunchedEffect(showLivePreview) {
+        if (showLivePreview) {
+            client.sendAction(DeviceAction.CAPTURE_SCREEN)
+            previewViewModel.onEvent(
+                RemotePreviewEvent.StartPolling(device.ip, device.pin, device.accessToken.orEmpty())
+            )
+        } else {
+            previewViewModel.onEvent(RemotePreviewEvent.StopPolling)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { previewViewModel.onEvent(RemotePreviewEvent.StopPolling) }
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -83,6 +118,38 @@ fun DeviceControlScreen(
                 title = "Kontrol: ${device.name}",
                 onBackClick = { navController.popBackStack() }
             )
+        },
+        bottomBar = {
+            Surface(tonalElevation = 3.dp, shadowElevation = 8.dp) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("Aksi navigasi", style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ControlActionButton(
+                            label = "Back",
+                            modifier = Modifier.weight(1f),
+                            enabled = connected,
+                            onClick = { sendNavAction(DeviceAction.GLOBAL_BACK) }
+                        )
+                        ControlActionButton(
+                            label = "Home",
+                            modifier = Modifier.weight(1f),
+                            enabled = connected,
+                            onClick = { sendNavAction(DeviceAction.GLOBAL_HOME) }
+                        )
+                        ControlActionButton(
+                            label = "Recent",
+                            modifier = Modifier.weight(1f),
+                            enabled = connected,
+                            onClick = { sendNavAction(DeviceAction.GLOBAL_RECENT) }
+                        )
+                    }
+                }
+            }
         }) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -102,34 +169,6 @@ fun DeviceControlScreen(
                         label = if (connected) "Terhubung" else "Tidak terhubung",
                         active = connected
                     )
-                }
-            }
-            item {
-                ElevatedCard {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text("Aksi navigasi", style = MaterialTheme.typography.titleLarge)
-                        ControlActionButton(
-                            label = "Back",
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = connected,
-                            onClick = { sendNavAction(DeviceAction.GLOBAL_BACK) }
-                        )
-                        ControlActionButton(
-                            label = "Home",
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = connected,
-                            onClick = { sendNavAction(DeviceAction.GLOBAL_HOME) }
-                        )
-                        ControlActionButton(
-                            label = "Recent apps",
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = connected,
-                            onClick = { sendNavAction(DeviceAction.GLOBAL_RECENT) }
-                        )
-                    }
                 }
             }
             item {
@@ -170,22 +209,89 @@ fun DeviceControlScreen(
                 ElevatedCard {
                     Column(
                         modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text("Layar jarak jauh", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            text = "Lihat layar Target dan kirim gesture secara langsung.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Button(
-                            onClick = {
-                                client.sendAction(DeviceAction.CAPTURE_SCREEN)
-                                navController.navigate(NavigationTarget.Preview.withArg(device.id))
-                            },
-                            enabled = connected,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Buka live preview")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Layar jarak jauh", style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    text = "Lihat layar Target dan kirim gesture secara langsung.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = showLivePreview,
+                                onCheckedChange = { showLivePreview = it },
+                                enabled = connected
+                            )
+                        }
+                        if (showLivePreview) {
+                            StatusBadge(
+                                label = when {
+                                    previewState.isLoading -> "Memuat layar"
+                                    previewState.bitmap != null -> "Live"
+                                    previewState.error != null -> "Gagal memuat"
+                                    else -> "Menunggu layar"
+                                },
+                                active = previewState.bitmap != null
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(360.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                when {
+                                    previewState.isLoading -> {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            CircularProgressIndicator()
+                                            Text(
+                                                "Mengambil tangkapan layar...",
+                                                modifier = Modifier.padding(top = 12.dp)
+                                            )
+                                        }
+                                    }
+
+                                    previewState.bitmap != null -> {
+                                        RemotePreviewSurface(
+                                            image = previewState.bitmap!!.asImageBitmap(),
+                                            modifier = Modifier.fillMaxSize(),
+                                            onTap = { x, y ->
+                                                client.sendGesture(
+                                                    GestureRequest(
+                                                        type = GestureType.TAP,
+                                                        startX = x,
+                                                        startY = y,
+                                                        durationMs = 80
+                                                    )
+                                                )
+                                            },
+                                            onSwipe = { startX, startY, endX, endY ->
+                                                client.sendGesture(
+                                                    GestureRequest(
+                                                        type = GestureType.SWIPE,
+                                                        startX = startX,
+                                                        startY = startY,
+                                                        endX = endX,
+                                                        endY = endY,
+                                                        durationMs = 350
+                                                    )
+                                                )
+                                            }
+                                        )
+                                    }
+
+                                    previewState.error != null -> {
+                                        Text(
+                                            text = "Gagal memuat layar:\n${previewState.error}",
+                                            color = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.padding(24.dp)
+                                        )
+                                    }
+
+                                    else -> Text("Menunggu tangkapan layar...")
+                                }
+                            }
                         }
                     }
                 }
@@ -207,7 +313,32 @@ fun DeviceControlScreen(
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("Teks untuk Target") },
                             minLines = 3,
-                            maxLines = 5
+                            maxLines = 5,
+                            trailingIcon = {
+                                Row {
+                                    IconButton(
+                                        onClick = {
+                                            clipboardManager.getText()?.text?.let { pasted ->
+                                                clipboardText = pasted
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ContentPaste,
+                                            contentDescription = "Tempel dari clipboard perangkat ini"
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { clipboardText = "" },
+                                        enabled = clipboardText.isNotEmpty()
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Hapus teks"
+                                        )
+                                    }
+                                }
+                            }
                         )
                         Button(
                             onClick = {

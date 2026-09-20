@@ -40,7 +40,6 @@ import com.mories.control_droid.core.control.MacroRunner
 import com.mories.control_droid.core.model.DeviceAction
 import com.mories.control_droid.features.controller.AddDeviceScreen
 import com.mories.control_droid.features.controller.DeviceControlScreen
-import com.mories.control_droid.features.controller.RemotePreviewScreen
 import com.mories.control_droid.features.controller.MacroScreen
 import com.mories.control_droid.features.target.TargetWaitingScreen
 import com.mories.control_droid.ui.NavigationTarget
@@ -178,14 +177,8 @@ class MainActivity : ComponentActivity() {
                         composable(
                             route = NavigationTarget.Preview.withParam("id"),
                             arguments = listOf(navArgument("id") { type = NavType.StringType })
-                        ) { entry ->
-                            val id = entry.arguments?.getString("id").orEmpty()
-                            val device = store.getDeviceById(id)
-                            if (device != null) {
-                                RemotePreviewScreen(navController, device)
-                            } else {
-                                TargetWaitingScreen()
-                            }
+                        ) {
+                            TargetWaitingScreen()
                         }
                     }
                 }
