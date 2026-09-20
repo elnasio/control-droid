@@ -64,7 +64,7 @@ Build release setelah seluruh nilai tersedia:
 ./gradlew :app:assembleRelease
 ```
 
-Nama output release mengikuti format `control-droid-<versionName>-<versionCode>.apk`, contohnya `control-droid-1.2.0-8.apk`, di bawah `app/build/outputs/apk/release/`.
+Nama output release mengikuti format `control-droid-<versionName>-<versionCode>.apk`, contohnya `control-droid-1.3.0-9.apk`, di bawah `app/build/outputs/apk/release/`.
 
 Build release mengaktifkan R8 melalui `isMinifyEnabled = true` dan resource shrinking melalui `isShrinkResources = true`. Hasil mapping obfuscation berada di `app/build/outputs/mapping/release/mapping.txt`; simpan file ini untuk kebutuhan crash deobfuscation dan jangan commit ke repository.
 
@@ -136,6 +136,7 @@ Discovery menggunakan prefix `/24`; jika jaringan tidak sesuai asumsi ini, gunak
 - PIN adalah fallback dan bukan pengganti token QR pada endpoint `/pair`.
 - Accessibility diperlukan untuk aksi global, gesture, dan paste.
 - MediaProjection diperlukan untuk screenshot.
+- Screen sharing bisa dihentikan kapan saja lewat tombol "Hentikan screen share" di Target mode, atau tombol "Stop" pada notifikasi ongoing "ControlDroid screen sharing" tanpa perlu membuka app.
 
 ## 5. Acceptance checklist dua device
 

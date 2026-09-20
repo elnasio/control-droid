@@ -15,6 +15,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -26,10 +28,16 @@ object ScreenCaptureManager {
     private lateinit var mediaProjectionManager: MediaProjectionManager
     private var autoCaptureJob: Job? = null
 
+    // Named to avoid colliding with kotlinx.coroutines.isActive, which startAutoCapture's
+    // `while (isActive)` loop already relies on inside its CoroutineScope receiver.
+    private val _isSharing = MutableStateFlow(false)
+    val isSharing: StateFlow<Boolean> = _isSharing
+
     fun setProjection(context: Context, resultCode: Int, data: Intent) {
         mediaProjectionManager =
             context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
+        _isSharing.value = true
         Log.d("ScreenCapture", "✅ MediaProjection initialized")
     }
 
@@ -60,6 +68,7 @@ object ScreenCaptureManager {
         stopAutoCapture()
         mediaProjection?.stop()
         mediaProjection = null
+        _isSharing.value = false
     }
 
     suspend fun captureOnceSuspend(context: Context): Bitmap? = withContext(Dispatchers.Main) {

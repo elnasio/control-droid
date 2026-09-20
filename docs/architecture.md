@@ -195,6 +195,11 @@ Jika service belum aktif, operasi gagal secara log dan tidak dapat benar-benar m
 5. Frame terakhir disimpan sebagai `cacheDir/screenshot.png`.
 6. Controller mengambil file tersebut melalui `/screenshot`.
 
+`ScreenCaptureManager.isSharing` (`StateFlow<Boolean>`) melacak status aktif/tidaknya proyeksi secara reaktif — `true` sejak `setProjection(...)`, kembali `false` setelah `releaseProjection()`. `TargetWaitingScreen` men-observe ini untuk menonaktifkan tombol "Izinkan screen capture" dan menampilkan tombol merah "Hentikan screen share" selama sharing aktif. Ada dua jalur untuk menghentikannya, keduanya berakhir di `ScreenCaptureService.onDestroy()` → `ScreenCaptureManager.releaseProjection()`:
+
+- Tombol "Hentikan screen share" di `TargetWaitingScreen` → `context.stopService(Intent(context, ScreenCaptureService::class.java))`.
+- Tombol "Stop" pada notifikasi ongoing `ScreenCaptureService` (`ACTION_STOP` → `stopSelf()`), tanpa perlu membuka app.
+
 Jika permission dicabut atau service berhenti, preview tidak mendapatkan frame baru.
 
 ## 6. Persistence

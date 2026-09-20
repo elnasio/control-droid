@@ -2,6 +2,7 @@ package com.mories.control_droid.features.target
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -18,6 +19,11 @@ class ScreenCaptureService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         // Activity.RESULT_OK is -1, so a missing-extra sentinel of -1 would
         // misclassify every successful grant as "missing". Use MIN_VALUE,
         // which no real Activity result code will ever equal.
@@ -25,11 +31,16 @@ class ScreenCaptureService : Service() {
         val resultData = intent?.parcelableIntentExtra(EXTRA_RESULT_DATA)
         if (resultCode == Int.MIN_VALUE || resultData == null) return START_NOT_STICKY
 
+        val stopIntent = Intent(this, ScreenCaptureService::class.java).setAction(ACTION_STOP)
+        val stopPendingIntent = PendingIntent.getService(
+            this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("ControlDroid screen sharing")
             .setContentText("Screen preview is available to paired controllers")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPendingIntent)
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -76,6 +87,7 @@ class ScreenCaptureService : Service() {
     companion object {
         const val EXTRA_RESULT_CODE = "result_code"
         const val EXTRA_RESULT_DATA = "result_data"
+        const val ACTION_STOP = "com.mories.control_droid.action.STOP_SCREEN_CAPTURE"
         private const val CHANNEL_ID = "screen_capture"
         private const val NOTIFICATION_ID = 1001
     }

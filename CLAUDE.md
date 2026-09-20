@@ -83,6 +83,11 @@ PIN/token enforcement is wired end-to-end:
 - Never run `git commit` or create a new branch on your own initiative. Always ask the user for explicit confirmation first and wait for a clear "yes" before committing or branching.
 - This applies even if the requested task implies committing (e.g. "fix this bug and commit it") — implement the change, then stop and confirm before running the commit/branch command.
 
+## Device testing rules
+
+- Before running any adb-based instrumented/on-device verification (installing an APK, injecting SharedPreferences via `run-as`, driving the UI with `input tap`/`uiautomator`, reading logcat from a connected device, etc.), ask the user for explicit confirmation first and wait for a clear "yes".
+- This applies even when the change is small or the verification seems routine — confirm before touching the connected physical device, not after.
+
 ## Dependencies of note
 
 - `org.nanohttpd:nanohttpd-websocket` — embedded HTTP server on the Target (`NanoWSD`'s WebSocket features are not used; only the plain `NanoHTTPD` request handling in `TargetHttpServer`).

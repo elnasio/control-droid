@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -127,6 +128,7 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
     }
 
     val trustedControllerStore = remember { TrustedControllerStore(context) }
+    val isScreenSharing by ScreenCaptureManager.isSharing.collectAsState()
     val lastControllerActivityAt by TargetHttpServer.lastControllerActivityAt.collectAsState()
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     var trustedControllers by remember { mutableStateOf(trustedControllerStore.getAll()) }
@@ -313,11 +315,26 @@ fun TargetWaitingScreen(deviceName: String = "This Device") {
                                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                 context.startActivity(intent)
                             },
+                            enabled = !isScreenSharing,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp)
                         ) {
                             Text("Izinkan screen capture")
+                        }
+                        if (isScreenSharing) {
+                            Button(
+                                onClick = { context.stopService(Intent(context, ScreenCaptureService::class.java)) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp)
+                            ) {
+                                Text("Hentikan screen share")
+                            }
                         }
                     }
                 }
